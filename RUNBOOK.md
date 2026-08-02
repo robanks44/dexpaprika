@@ -5,16 +5,34 @@ Every command supports `--json` (use it — you are the operator). Exit codes:
 0 ok, 1 operational failure (JSON `{"error": ...}` explains what to fix),
 2 usage error, 3 degraded (healthcheck only).
 
-## First reads in any session
+## First reads in any session (bootstrap order)
 
 ```
-dexpaprika status --json        # what exists, wallet counts, config summary
-dexpaprika healthcheck --json   # exit 0 only if ALL checks pass; 3 = degraded
+dexpaprika healthcheck --json   # 1. trustworthy right now? exit 0 = yes
+dexpaprika report --json        # 2. portfolio by group, with as_of
+dexpaprika hedge status --json  # 3. coverage / quadrant / flags
+dexpaprika alerts log --json    # 4. what fired lately, was it delivered
+dexpaprika quota --json         # 5. remaining API headroom
+dexpaprika status --json        # (anytime) config + wallet summary
 ```
 
-Healthcheck checks reporting `not-implemented` are pending later sections —
-degraded (exit 3) is the EXPECTED state until the full system is built.
-A check reporting `fail: ...` tells you exactly what to fix.
+Healthcheck failing = fix that FIRST (each `fail: ...` says how; reference
+table below). All nine checks are real as of S10; `upstream_reachability`
+and `clock_sanity` need network — the rest are offline.
+
+### Healthcheck reference (S10)
+
+| check | verifies | on fail |
+|---|---|---|
+| `db_integrity` | PRAGMA integrity + FK check | `dexpaprika db restore` from the newest verified backup |
+| `migrations_current` | schema at packaged head | `dexpaprika db migrate` |
+| `upstream_reachability` | one cheap live call per upstream (Base/Arbitrum RPC, GMX, DexPaprika; ntfy excluded — `alerts test` covers it) | named upstream is down: check connectivity, wait out the ring/breaker, or extend the URL rings via env |
+| `secrets_present` | `ntfy_topic` resolvable | store it in keyring (service `dexpaprika`) or `DEXPAPRIKA_SECRET_NTFY_TOPIC` |
+| `clock_sanity` | local UTC vs Base block time (≤5 min skew) | fix the system clock — staleness/cooldown/quota windows lie until then |
+| `last_snapshot_age` | newest snapshot ≤ 90 min old | scheduled recorder gapped: check the Task Scheduler task, run `dexpaprika snapshot` |
+| `data_dir_writable` | write probe in `DEXPAPRIKA_DATA_DIR` | fix path/permissions |
+| `repo_state` | git checkout clean (installed wheel = ok) | commit or stash — never operate on unverified code |
+| `operational_state` | mode (read-only; S9 gated), limits, live short exposure vs `max_position_usd` | exposure over a configured limit: do NOT act; resolve sizing/limits first |
 
 ## Configuration (S1)
 
@@ -33,8 +51,8 @@ A check reporting `fail: ...` tells you exactly what to fix.
 
 ```
 dexpaprika wallets list --json
-dexpaprika wallets add --chain evm|btc|solana --address <addr> [--label <name>] --json
-dexpaprika wallets remove  --address <addr> | --label <name>   # --json
+dexpaprika wallets add --chain evm --address 0xYourAddress [--label main] --json
+dexpaprika wallets remove --address 0xYourAddress --json   # or select by --label
 dexpaprika wallets exclude --label <name> --json   # keep registered, stop tracking
 dexpaprika wallets include --label <name> --json   # resume tracking
 ```
@@ -231,9 +249,32 @@ alerts when the pipeline gaps). Query health:
 4. `dexpaprika alerts log --json` — what fired lately and was it delivered.
 5. `dexpaprika quota --json` — remaining API headroom.
 
+## System-wide failure modes & recovery (S10)
+
+Triage order when things look wrong: `healthcheck` → the failing check's
+recovery above → `alerts log --json` (did the system already tell you?) →
+the table below.
+
+| Symptom | Meaning | Recovery |
+|---|---|---|
+| "RPC ring exhausted" (exit 1) | every peer for that chain failed | transient: retry next tick. Persistent: check network, extend the ring (`DEXPAPRIKA_BASE_RPC_URLS` / `DEXPAPRIKA_ARBITRUM_RPC_URLS`) |
+| "circuit open for '<provider>' … retry in Ns" | that upstream failed repeatedly; breaker is cooling down | wait it out (~60s) — the breaker half-opens by itself; do not hammer |
+| "credit budget exhausted for '<provider>'" | monthly credit budget spent — waiting will NOT help | stop calling that provider until next month, or raise the seeded budget deliberately; `quota --json` shows usage |
+| `snapshot-stale` alert / `last_snapshot_age` fail | recorder gapped (laptop asleep, task disabled) | `schtasks /Query /TN dexpaprika\recorder /V /FO LIST`; then run `dexpaprika snapshot --json` and confirm the alert clears |
+| `naked-lp` alert | GMX short GONE (SL fired or closed) while the LP is live | verify on GMX; decide re-arm per the Insurance Policy playbook (S9 execution still requires explicit go-ahead) |
+| DB corrupt (integrity fail / "file is not a database") | disk issue or interrupted write | restore drill: `dexpaprika db restore --json` (newest verified backup), then `db status --json` must say integrity ok — drill is tested in the gate suite |
+| `PinMismatchError` on chain snapshot | load-balanced RPC served a lagging node | re-run; if persistent, reorder/extend that chain's RPC ring |
+| alerts exit 3, `ntfy_status` recorded | delivery failed but the firing IS recorded | fix connectivity/topic, next cooldown-expired check re-delivers; nothing is lost |
+| clock skew fail | Windows clock drifted | resync time; until then staleness ages, cooldowns, and quota windows are unreliable |
+
 ## Gates (build sessions)
 
 ```
 make test    # offline gate suite (what the fresh-agent verifier runs)
 make audit   # bandit + pip-audit (needs network)
+make smoke   # LIVE read-only smoke suite (real upstreams, throwaway data dir)
 ```
+
+The gate now also enforces doc integrity: every `dexpaprika` command in this
+file must parse against the real CLI, and every referenced repo path must
+exist — if you edit this RUNBOOK, `make test` checks your work.

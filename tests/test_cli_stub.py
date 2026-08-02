@@ -47,17 +47,20 @@ def test_status_human_output(capsys: pytest.CaptureFixture[str]) -> None:
         json.loads(out)
 
 
-def test_healthcheck_degraded_while_any_check_unimplemented(
+def test_healthcheck_degraded_on_empty_environment(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """S10: every check is real — an unbootstrapped env fails with actionable text."""
     exit_code = main(["healthcheck", "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == EXIT_DEGRADED
     assert payload["healthy"] is False
     assert payload["degraded"] is True
-    # Exit 0 only if ALL pass (ENGINEERING_STANDARDS §2): as long as any
-    # check reports not-implemented, healthcheck must stay degraded.
-    assert "not-implemented" in set(payload["checks"].values())
+    checks = payload["checks"]
+    # Exit 0 only if ALL pass (ENGINEERING_STANDARDS §2); nothing may be stubbed.
+    assert "not-implemented" not in set(checks.values())
+    assert str(checks["db_integrity"]).startswith("fail")
+    assert "db migrate" in str(checks["db_integrity"])
 
 
 def test_healthcheck_covers_required_checks(capsys: pytest.CaptureFixture[str]) -> None:

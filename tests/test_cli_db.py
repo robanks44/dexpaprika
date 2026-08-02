@@ -72,6 +72,9 @@ def test_healthcheck_db_checks(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DEXPAPRIKA_SECRET_NTFY_TOPIC", "dummy")  # pragma: allowlist secret
+    # This test is about the DB checks; the network pair is covered (mocked and
+    # drilled) in test_integration.py.
+    monkeypatch.setattr("dexpaprika.cli._check_network_health", lambda _s: ("ok", "ok"))
     # Before migrate: both DB checks fail with actionable messages.
     code = main(["healthcheck", "--json"])
     out = json.loads(capsys.readouterr().out)
@@ -81,7 +84,8 @@ def test_healthcheck_db_checks(
     assert str(checks["migrations_current"]).startswith("fail")
     assert code == EXIT_DEGRADED
 
-    # After migrate: both ok (other checks still pending → still degraded).
+    # After migrate: both ok (no snapshots yet → last_snapshot_age keeps it
+    # degraded — correctly).
     main(["db", "migrate", "--json"])
     capsys.readouterr()
     code = main(["healthcheck", "--json"])
@@ -90,4 +94,5 @@ def test_healthcheck_db_checks(
     assert isinstance(checks, dict)
     assert checks["db_integrity"] == "ok"
     assert checks["migrations_current"] == "ok"
+    assert str(checks["last_snapshot_age"]).startswith("fail")
     assert code == EXIT_DEGRADED

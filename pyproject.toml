@@ -72,7 +72,7 @@ warn_unreachable = true
 warn_unused_ignores = true
 
 [tool.pytest.ini_options]
-addopts = "--disable-socket --strict-markers -q --cov=dexpaprika --cov-report=term-missing --cov-fail-under=80"
+addopts = "--disable-socket --strict-markers -q -m 'not live' --cov=dexpaprika --cov-report=term-missing --cov-fail-under=80"
 testpaths = ["tests"]
 markers = [
     "live: read-only live smoke tests (network; EXCLUDED from the gate suite)",
