@@ -48,8 +48,7 @@ def test_money_fields_are_decimal_from_strings(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("DEXPAPRIKA_MAX_POSITION_USD", "13155.76")
     s = Settings.load()
     assert s.max_position_usd == Decimal("13155.76")
-    assert isinstance(s.max_position_usd, Decimal)
-    assert not isinstance(s.max_position_usd, float)
+    assert isinstance(s.max_position_usd, Decimal)  # Decimal and float are disjoint types
 
 
 def test_comma_separated_lists(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,17 +67,17 @@ def test_comma_separated_lists(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_rpc_urls_must_be_https(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEXPAPRIKA_BASE_RPC_URLS", "http://insecure.example.com")
-    with pytest.raises(Exception, match="[Hh]ttps|URL"):
+    with pytest.raises(Exception, match=r"[Hh]ttps|URL"):
         Settings.load()
 
 
 def test_invalid_log_level_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEXPAPRIKA_LOG_LEVEL", "LOUD")
-    with pytest.raises(ValueError, match="LOG_LEVEL|log_level"):
+    with pytest.raises(ValueError, match=r"LOG_LEVEL|log_level"):
         Settings.load()
 
 
 def test_invalid_secret_backend_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEXPAPRIKA_SECRET_BACKEND", "vault")
-    with pytest.raises(ValueError, match="SECRET_BACKEND|secret_backend"):
+    with pytest.raises(ValueError, match=r"SECRET_BACKEND|secret_backend"):
         Settings.load()

@@ -123,3 +123,39 @@ class TestSolana:
 def test_unknown_chain_family_rejected() -> None:
     with pytest.raises(AddressValidationError, match="chain"):
         validate_address("dogecoin", "D...")  # boundary test of an invalid family string
+
+
+class TestBtcErrorPaths:
+    """Error-path coverage for the base58check/bech32 branches (core-logic gate)."""
+
+    def test_testnet_version_byte_rejected(self) -> None:
+        # Valid Base58Check, but version 0x6f (testnet P2PKH) — not a mainnet wallet.
+        testnet = "mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn"  # pragma: allowlist secret
+        with pytest.raises(AddressValidationError, match="version"):
+            validate_address("btc", testnet)
+
+    def test_bech32_data_section_too_short(self) -> None:
+        with pytest.raises(AddressValidationError, match=r"short"):
+            validate_address("btc", "bc1qqq")
+
+    def test_bech32_invalid_charset_character(self) -> None:
+        # 'b' is not in the bech32 charset.
+        with pytest.raises(AddressValidationError, match="character"):
+            validate_address("btc", "bc1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+    def test_unsupported_witness_version_rejected(self) -> None:
+        # BIP-173 valid vector with witness version 16 ("bc1sw50...") — checksum
+        # valid but outside the v0/v1 set this registry accepts.
+        with pytest.raises(AddressValidationError, match="witness version"):
+            validate_address("btc", "bc1sw50qgdz25j")
+
+    def test_segwit_v0_wrong_program_length_rejected(self) -> None:
+        # BIP-173 invalid-vector class: v0 with a program that is not 20/32 bytes.
+        with pytest.raises(AddressValidationError):
+            validate_address("btc", "bc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv8dvw0")
+
+
+class TestSolanaErrorPaths:
+    def test_leading_ones_shorter_than_32_bytes(self) -> None:
+        with pytest.raises(AddressValidationError, match="32 bytes"):
+            validate_address("solana", "1" * 31)  # 31 zero bytes only

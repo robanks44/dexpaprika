@@ -34,14 +34,14 @@ def test_add_normalizes_address(registry: WalletRegistry) -> None:
 
 
 def test_add_validates_address(registry: WalletRegistry) -> None:
-    with pytest.raises(Exception, match="checksum|invalid|hex"):
+    with pytest.raises(Exception, match=r"checksum|invalid|hex"):
         registry.add("evm", "0xnot-an-address")
     assert registry.list_wallets() == []
 
 
 def test_duplicate_rejected_case_insensitively(registry: WalletRegistry) -> None:
     registry.add("evm", EVM)
-    with pytest.raises(RegistryError, match="[Dd]uplicate"):
+    with pytest.raises(RegistryError, match=r"[Dd]uplicate"):
         registry.add("evm", EVM.lower())
     assert len(registry.list_wallets()) == 1
 
@@ -80,7 +80,7 @@ def test_remove_by_label(registry: WalletRegistry) -> None:
 
 
 def test_remove_unknown_raises(registry: WalletRegistry) -> None:
-    with pytest.raises(RegistryError, match="[Nn]o wallet"):
+    with pytest.raises(RegistryError, match=r"[Nn]o wallet"):
         registry.remove(address=EVM)
 
 
@@ -93,7 +93,7 @@ def test_include_exclude_cycle(registry: WalletRegistry) -> None:
 
 
 def test_exclude_unknown_raises(registry: WalletRegistry) -> None:
-    with pytest.raises(RegistryError, match="[Nn]o wallet"):
+    with pytest.raises(RegistryError, match=r"[Nn]o wallet"):
         registry.set_included(False, label="ghost")
 
 

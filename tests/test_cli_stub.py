@@ -1,13 +1,14 @@
-"""Gate-suite tests for the S0 CLI stub.
+"""Gate-suite tests for the core CLI contract (status/healthcheck/exit codes).
 
 Offline by construction (pytest-socket disables the network for the whole
 suite via addopts). These tests pin the CLI contract the agent relies on:
-JSON output, exit codes, honest degraded healthcheck.
+JSON output, exit codes, honest degraded healthcheck until every check passes.
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -20,14 +21,20 @@ from dexpaprika.cli import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """status/healthcheck read Settings since S1 — point them at a tmp dir."""
+    monkeypatch.setenv("DEXPAPRIKA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DEXPAPRIKA_SECRET_BACKEND", "env")
+
+
 def test_status_json_contract(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = main(["status", "--json"])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == EXIT_OK
     assert payload["app"] == "dexpaprika"
     assert payload["version"] == __version__
-    assert payload["phase"] == "scaffold"
-    assert payload["sections_complete"] == ["s0"]
+    assert "s0" in payload["sections_complete"]
 
 
 def test_status_human_output(capsys: pytest.CaptureFixture[str]) -> None:
@@ -40,7 +47,7 @@ def test_status_human_output(capsys: pytest.CaptureFixture[str]) -> None:
         json.loads(out)
 
 
-def test_healthcheck_is_degraded_until_checks_exist(
+def test_healthcheck_degraded_while_any_check_unimplemented(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code = main(["healthcheck", "--json"])
@@ -48,8 +55,9 @@ def test_healthcheck_is_degraded_until_checks_exist(
     assert exit_code == EXIT_DEGRADED
     assert payload["healthy"] is False
     assert payload["degraded"] is True
-    # Exit 0 only if ALL pass (ENGINEERING_STANDARDS §2) — nothing passes yet.
-    assert set(payload["checks"].values()) == {"not-implemented"}
+    # Exit 0 only if ALL pass (ENGINEERING_STANDARDS §2): as long as any
+    # check reports not-implemented, healthcheck must stay degraded.
+    assert "not-implemented" in set(payload["checks"].values())
 
 
 def test_healthcheck_covers_required_checks(capsys: pytest.CaptureFixture[str]) -> None:
