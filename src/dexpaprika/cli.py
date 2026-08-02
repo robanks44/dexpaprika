@@ -316,6 +316,66 @@ def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_gmx(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.clients.base import TransportError
+    from dexpaprika.clients.gmx import GmxClient
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first (quota tracking)"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    address = args.address
+    if address is None:
+        included_evm = [
+            w for w in _registry(settings).list_wallets() if w.chain_family == "evm" and w.included
+        ]
+        if len(included_evm) != 1:
+            _emit(
+                {
+                    "error": (
+                        f"{len(included_evm)} included EVM wallets in the registry —"
+                        " pass --address explicitly"
+                    )
+                },
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+        address = included_evm[0].address
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        client = GmxClient(
+            conn,
+            settings=settings,
+            clients=[_http_client_factory(peer) for peer in settings.gmx_rest_peers],
+        )
+        positions = client.get_positions(address)
+        payload: dict[str, Any] = {
+            "address": address,
+            "positions": [p.model_dump(mode="json", exclude={"raw"}) for p in positions],
+        }
+        if not positions:
+            payload["note"] = (
+                "empty list is a VALID state: no open positions (closed/liquidated looks like this)"
+            )
+        if args.record:
+            for position in positions:
+                client.record_observation(position)
+            payload["recorded"] = len(positions)
+    except (TransportError, QuotaError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_quota(args: argparse.Namespace, *, as_json: bool) -> int:
     from dexpaprika.quota import QuotaError, QuotaTracker
 
@@ -427,6 +487,17 @@ def build_parser() -> argparse.ArgumentParser:
     m_ohlcv.add_argument("--record", action="store_true", help="Upsert into ohlcv table.")
     _add_json_flag(m_ohlcv)
 
+    gmx = subparsers.add_parser("gmx", help="GMX v2 hedge-leg data (positions + orders).")
+    gmx_sub = gmx.add_subparsers(dest="gmx_command", required=True)
+    g_pos = gmx_sub.add_parser(
+        "positions", help="Open positions incl. related orders (scaled Decimals)."
+    )
+    g_pos.add_argument(
+        "--address", default=None, help="Defaults to the single included EVM wallet."
+    )
+    g_pos.add_argument("--record", action="store_true", help="Persist observation to DB.")
+    _add_json_flag(g_pos)
+
     return parser
 
 
@@ -443,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_quota(args, as_json=args.as_json)
     if args.command == "market":
         return _cmd_market(args, as_json=args.as_json)
+    if args.command == "gmx":
+        return _cmd_gmx(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

@@ -105,6 +105,20 @@ dexpaprika market ohlcv --network base --address <pool> --start YYYY-MM-DD \
 - "circuit open for 'dexpaprika'" = 5 consecutive failed calls; wait ~60s,
   it self-heals on the next successful probe.
 
+## GMX hedge leg (S4)
+
+```
+dexpaprika gmx positions [--address 0x...] [--record] --json
+```
+
+- `--address` defaults to the single INCLUDED EVM wallet in the registry.
+- All numbers are exact Decimal strings (may carry trailing zeros).
+- `positions: []` with a note is a VALID state — no open positions; a closed
+  or liquidated position looks exactly like this. S7/S8 alert on the change.
+- Related SL order shows `order_kind: stop-loss-decrease`, scaled
+  `trigger_price`, `is_full_close` instead of a fake size number.
+- Peers rotate automatically; "all GMX peers failed" names both with reasons.
+
 ## Gates (build sessions)
 
 ```
