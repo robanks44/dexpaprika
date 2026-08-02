@@ -442,3 +442,20 @@
   tables (api_call_log, pool_metrics, ohlcv) per the unique-index rule; SBOM
   from the FROZEN no-dev export attached to `make release`
 - Spec: docs/specs/S11-packaging.md
+- Test summary (written before code): 26 tests — pgdialect translation
+  (BIGSERIAL, TIMESTAMPTZ time columns, quoted "interval", hypertable DDL
+  order/tables, FK-target exclusion), scheduler playbook knobs
+  (max_instances/coalesce/misfire on every job, cadence env, run_job logs
+  exit codes and crashes without dying), compose/Dockerfile/Makefile
+  integrity (env-only secrets, read_only rootfs, non-root, sbom/release)
+- Build-run evidence: Timescale rehearsal EXECUTED vs disposable
+  timescale/timescaledb:2.17.2-pg16 -> PASS (probes/out/s11/
+  pg_rehearsal_report.json: 2 migrations/24 statements, 3 hypertables,
+  Decimal-string inserts verified); rehearsal caught the TimescaleDB 2.17
+  by_range(col, INTERVAL) API (chunk interval inside by_range, not a
+  kwarg) - dialect corrected from live evidence; docker image built
+  (sandbox egress-CA hook added to Dockerfile as documented optional
+  build-ca.crt glob; /data chown bug fixed); container parity: live
+  snapshot of the real wallet + healthcheck healthy INSIDE the container
+  with env-backend secrets; compose config validates; make release ->
+  wheel + sdist + CycloneDX 1.6 SBOM (27 runtime components)
