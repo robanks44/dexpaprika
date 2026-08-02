@@ -420,3 +420,54 @@
   contract (not-implemented no longer exists; network pair mocked in the DB-
   focused test — drilled for real in test_integration.py); RUNBOOK placeholder
   commands normalized to parseable examples (the new doc-integrity gate at work)
+
+### S11 — Cloud packaging — `complete`
+- Attempts: 1
+- Branch: `section/s11-packaging` | Merge commit: — | Tag: —
+- Reference docs read: ENGINEERING_STANDARDS §6 (one artifact, compose parity,
+  externalized scheduling, documented Timescale path) + §3 (CycloneDX SBOM);
+  timescaledb--api-reference--lp-tracker.md (create_hypertable/by_range on
+  EMPTY TIMESTAMPTZ tables, hypertable unique-index-must-include-time rule);
+  python-scheduling playbook Option B (APScheduler for the persistent
+  VPS/container process: max_instances=1, coalesce, misfire_grace_time, pin
+  major)
+- Probe evidence (Step 2b): sandbox dockerd started + Docker Hub pull verified
+  live (python:3.13-slim); compose v5 present; rehearsal report will land in
+  probes/out/s11/
+- Design notes / decisions: scheduler subcommand (Option B) drives the SAME CLI
+  mains in-process with per-run JSON exit-code lines; compose = one scheduler
+  service, env-backend secrets (the §3 provider swap), read-only rootfs; PG
+  dialect translation gate-tested pure, rehearsal executed against disposable
+  timescale/timescaledb pg16; hypertables limited to append-only non-FK-target
+  tables (api_call_log, pool_metrics, ohlcv) per the unique-index rule; SBOM
+  from the FROZEN no-dev export attached to `make release`
+- Spec: docs/specs/S11-packaging.md
+- Test summary (written before code): 26 tests — pgdialect translation
+  (BIGSERIAL, TIMESTAMPTZ time columns, quoted "interval", hypertable DDL
+  order/tables, FK-target exclusion), scheduler playbook knobs
+  (max_instances/coalesce/misfire on every job, cadence env, run_job logs
+  exit codes and crashes without dying), compose/Dockerfile/Makefile
+  integrity (env-only secrets, read_only rootfs, non-root, sbom/release)
+- Build-run evidence: Timescale rehearsal EXECUTED vs disposable
+  timescale/timescaledb:2.17.2-pg16 -> PASS (probes/out/s11/
+  pg_rehearsal_report.json: 2 migrations/24 statements, 3 hypertables,
+  Decimal-string inserts verified); rehearsal caught the TimescaleDB 2.17
+  by_range(col, INTERVAL) API (chunk interval inside by_range, not a
+  kwarg) - dialect corrected from live evidence; docker image built
+  (sandbox egress-CA hook added to Dockerfile as documented optional
+  build-ca.crt glob; /data chown bug fixed); container parity: live
+  snapshot of the real wallet + healthcheck healthy INSIDE the container
+  with env-backend secrets; compose config validates; make release ->
+  wheel + sdist + CycloneDX 1.6 SBOM (27 runtime components)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 8d8fb04, make test
+  PASS (338 passed, 4 live deselected; coverage 94.79%), make audit PASS; container
+  parity re-verified independently (image rebuilt; final image ships the STOCK CA
+  bundle — 142 certs, identical to stock base, proxy CA not shipped; live in-container
+  snapshot of the real wallet + healthcheck healthy:true with env-backend secrets);
+  compose validates AND refuses to start without the topic env; Timescale rehearsal
+  re-run PASS vs fresh timescaledb 2.17.2-pg16 (matches committed probe report); SBOM
+  CycloneDX 1.6 with runtime deps only (no pytest/ruff/mypy). Deviations honestly
+  noted by verifier and corrected in spec: pool_metrics had no UNIQUE key (spec
+  wording fixed); only alerts cadence is env-configurable (snapshot/backup fixed).
+- Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
+- Completed: 2026-08-02

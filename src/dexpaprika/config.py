@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # Monthly credit budgets only — rate windows fill transiently by design.
     quota_alert_used_pct: Decimal = Decimal("0.80")
 
+    # --- scheduler (S11, container/VPS path) ---
+    # Alerts-monitor cadence; snapshot stays hourly-on-the-hour, backup daily.
+    scheduler_alerts_minutes: int = 5
+
     # --- S9 hard limits (Decimal money; zero/empty = execution disabled) ---
     max_position_usd: Decimal = Decimal("0")
     max_delta_per_run_usd: Decimal = Decimal("0")

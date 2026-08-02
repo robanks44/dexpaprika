@@ -267,6 +267,41 @@ the table below.
 | alerts exit 3, `ntfy_status` recorded | delivery failed but the firing IS recorded | fix connectivity/topic, next cooldown-expired check re-delivers; nothing is lost |
 | clock skew fail | Windows clock drifted | resync time; until then staleness ages, cooldowns, and quota windows are unreliable |
 
+## Deployment (S11 — container/VPS)
+
+```
+docker build -t dexpaprika:latest .
+DEXPAPRIKA_SECRET_NTFY_TOPIC=yourtopic docker compose up -d
+docker compose run --rm scheduler healthcheck --json   # one-off ops via the same image
+docker compose logs -f scheduler                       # one JSON line per job run
+dexpaprika scheduler jobs --json                       # inspect the schedule
+```
+
+- The image is multi-stage, non-root, pinned base; ENTRYPOINT is the CLI, so
+  ANY runbook command works via `docker compose run --rm scheduler <cmd>`.
+- The `scheduler` service runs `dexpaprika scheduler run` (scheduling
+  playbook Option B — the container/VPS counterpart of schtasks): snapshot
+  hourly on the hour, `alerts check` every 5 min
+  (`DEXPAPRIKA_SCHEDULER_ALERTS_MINUTES`), `db backup` daily 03:10 UTC —
+  every job `max_instances=1`, `coalesce=True`, `misfire_grace_time=120s`,
+  so restarts/sleeps produce ONE catch-up run, never a backlog storm.
+- Secrets: the provider swap in action — containers use the env backend;
+  pass `DEXPAPRIKA_SECRET_*` from the HOST environment (or an orchestrator
+  secret store). Values never go in compose.yaml, the image, or git.
+- Data lives in the `dexpaprika-data` volume; the daily `db backup` job
+  writes verified backups inside it (restore drill: RUNBOOK Database
+  section works unchanged in-container).
+- Timescale/Postgres path (rehearsed, not just documented): translate +
+  apply the packaged migrations to a disposable TimescaleDB and verify
+  hypertables with `scripts/pg_rehearsal.py` (see its docstring for the
+  exact docker commands; last report: probes/out/s11/pg_rehearsal_report.json).
+- Release artifact: `make release` → wheel + sdist + CycloneDX SBOM at
+  `dist/sbom.cdx.json` (frozen runtime dependency set).
+- VPS note: a persistent host unlocks SSE streaming (e.g. `ntfy subscribe`
+  for the S9 approval loop, streaming price feeds) that scheduled one-shot
+  runs cannot hold open. The scheduler service is already the persistent
+  process such features would attach to.
+
 ## Gates (build sessions)
 
 ```

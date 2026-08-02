@@ -943,6 +943,42 @@ def _cmd_quota(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_scheduler(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.scheduler import MISFIRE_GRACE_SECONDS, build_scheduler, job_specs
+
+    settings = Settings.load()
+    if args.scheduler_command == "jobs":
+        payload = {
+            "jobs": [
+                {
+                    "id": spec.id,
+                    "argv": spec.argv,
+                    "trigger": spec.trigger,
+                    "minutes": spec.minutes,
+                    "hour": spec.hour,
+                    "minute": spec.minute,
+                    "max_instances": 1,
+                    "coalesce": True,
+                    "misfire_grace_time": MISFIRE_GRACE_SECONDS,
+                }
+                for spec in job_specs(settings)
+            ]
+        }
+        _emit(payload, as_json=as_json)
+        return EXIT_OK
+    # run — persistent process (container/VPS); Ctrl-C / SIGTERM exits clean.
+    scheduler = build_scheduler(settings)
+    _emit(
+        {"scheduler": "starting", "jobs": [spec.id for spec in job_specs(settings)]},
+        as_json=as_json,
+    )
+    import contextlib
+
+    with contextlib.suppress(KeyboardInterrupt, SystemExit):
+        scheduler.start()
+    return EXIT_OK
+
+
 def _offline_health(settings: Settings) -> dict[str, str]:
     """The healthcheck subset that needs no network — alert-rule input."""
     return {
@@ -1232,6 +1268,15 @@ def build_parser() -> argparse.ArgumentParser:
     a_log.add_argument("--limit", type=int, default=20)
     _add_json_flag(a_log)
 
+    scheduler = subparsers.add_parser(
+        "scheduler", help="Container/VPS scheduler (playbook Option B; Windows uses schtasks)."
+    )
+    scheduler_sub = scheduler.add_subparsers(dest="scheduler_command", required=True)
+    s_jobs = scheduler_sub.add_parser("jobs", help="Show the configured jobs (offline).")
+    _add_json_flag(s_jobs)
+    s_run = scheduler_sub.add_parser("run", help="Run the persistent scheduler (blocks).")
+    _add_json_flag(s_run)
+
     return parser
 
 
@@ -1262,6 +1307,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_hedge(args, as_json=args.as_json)
     if args.command == "alerts":
         return _cmd_alerts(args, as_json=args.as_json)
+    if args.command == "scheduler":
+        return _cmd_scheduler(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 
