@@ -14,11 +14,20 @@ import argparse
 import json
 import sys
 import uuid
+from pathlib import Path
 from typing import Any
 
 from dexpaprika import __version__
 from dexpaprika.config import Settings
 from dexpaprika.secrets import resolve_provider
+from dexpaprika.storage.backup import (
+    BackupError,
+    create_backup,
+    latest_backup,
+    restore_backup,
+)
+from dexpaprika.storage.db import connect, db_path
+from dexpaprika.storage.migrations import MigrationError, migrate, pending
 from dexpaprika.wallets.registry import RegistryError, Wallet, WalletRegistry
 from dexpaprika.wallets.validation import AddressValidationError
 
@@ -112,11 +121,43 @@ def _check_data_dir_writable(settings: Settings) -> str:
     return "ok"
 
 
+def _check_db_integrity(settings: Settings) -> str:
+    path = db_path(settings)
+    if not path.exists():
+        return "fail: database missing — run `dexpaprika db migrate`"
+    conn = connect(path)
+    try:
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            return f"fail: integrity_check reports {integrity!r} — restore from backup"
+        if conn.execute("PRAGMA foreign_key_check").fetchall():
+            return "fail: foreign_key_check found orphaned rows — restore from backup"
+    finally:
+        conn.close()
+    return "ok"
+
+
+def _check_migrations_current(settings: Settings) -> str:
+    path = db_path(settings)
+    if not path.exists():
+        return "fail: database missing — run `dexpaprika db migrate`"
+    conn = connect(path)
+    try:
+        outstanding = pending(conn)
+    finally:
+        conn.close()
+    if outstanding:
+        return f"fail: {len(outstanding)} pending migration(s) — run `dexpaprika db migrate`"
+    return "ok"
+
+
 def _cmd_healthcheck(*, as_json: bool) -> int:
     settings = Settings.load()
     checks = dict.fromkeys(_HEALTHCHECKS, "not-implemented")
     checks["secrets_present"] = _check_secrets_present(settings)
     checks["data_dir_writable"] = _check_data_dir_writable(settings)
+    checks["db_integrity"] = _check_db_integrity(settings)
+    checks["migrations_current"] = _check_migrations_current(settings)
     healthy = all(value == "ok" for value in checks.values())
     _emit(
         {
@@ -151,6 +192,62 @@ def _cmd_wallets(args: argparse.Namespace, *, as_json: bool) -> int:
             wallet = registry.set_included(included, address=args.address, label=args.label)
             payload = {"wallet": _wallet_payload(wallet)}
     except (AddressValidationError, RegistryError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
+def _cmd_db(args: argparse.Namespace, *, as_json: bool) -> int:
+    settings = Settings.load()
+    path = db_path(settings)
+    backups_dir = settings.data_dir / "backups"
+    try:
+        if args.db_command == "status":
+            if not path.exists():
+                from dexpaprika.storage.migrations import packaged_migrations
+
+                names = [name for _v, (name, _s) in sorted(packaged_migrations().items())]
+                payload: dict[str, Any] = {
+                    "path": str(path),
+                    "exists": False,
+                    "pending": names,
+                    "integrity": "n/a — database not created yet",
+                }
+            else:
+                conn = connect(path)
+                try:
+                    payload = {
+                        "path": str(path),
+                        "exists": True,
+                        "size_bytes": path.stat().st_size,
+                        "pending": pending(conn),
+                        "integrity": conn.execute("PRAGMA integrity_check").fetchone()[0],
+                    }
+                finally:
+                    conn.close()
+        elif args.db_command == "migrate":
+            conn = connect(path)
+            try:
+                applied = migrate(conn)
+            finally:
+                conn.close()
+            payload = {"applied": applied}
+        elif args.db_command == "backup":
+            conn = connect(path)
+            try:
+                backup_file = create_backup(conn, backups_dir)
+            finally:
+                conn.close()
+            payload = {"backup": str(backup_file)}
+        else:  # restore
+            source = Path(args.source) if args.source else latest_backup(backups_dir)
+            if source is None:
+                _emit({"error": f"no backups found in {backups_dir}"}, as_json=as_json)
+                return EXIT_FAILURE
+            restore_backup(source, path)
+            payload = {"restored": True, "from": str(source), "to": str(path)}
+    except (BackupError, MigrationError, OSError) as exc:
         _emit({"error": str(exc)}, as_json=as_json)
         return EXIT_FAILURE
     _emit(payload, as_json=as_json)
@@ -206,6 +303,19 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--label", default=None)
         _add_json_flag(sub)
 
+    db = subparsers.add_parser("db", help="Database lifecycle: status, migrate, backup, restore.")
+    db_sub = db.add_subparsers(dest="db_command", required=True)
+    for name, help_text in (
+        ("status", "Schema version, pending migrations, integrity."),
+        ("migrate", "Apply pending migrations (idempotent)."),
+        ("backup", "Create a verified online backup."),
+    ):
+        sub = db_sub.add_parser(name, help=help_text)
+        _add_json_flag(sub)
+    db_restore = db_sub.add_parser("restore", help="Verified restore (newest backup by default).")
+    db_restore.add_argument("--from", dest="source", default=None, metavar="PATH")
+    _add_json_flag(db_restore)
+
     return parser
 
 
@@ -216,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_status(as_json=args.as_json)
     if args.command == "healthcheck":
         return _cmd_healthcheck(as_json=args.as_json)
+    if args.command == "db":
+        return _cmd_db(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 
