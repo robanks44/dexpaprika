@@ -389,3 +389,21 @@
 - Test-change justifications: post-tests-first edits were lint/type-only (unused
   unpack -> _out; dict -> Mapping params); assertions and contract unchanged
 - Completed: 2026-08-02
+
+### S10 — Whole-system integration & runbook — `in-progress`
+- Attempts: 1
+- Branch: `section/s10-integration` | Merge commit: — | Tag: —
+- Reference docs read: ENGINEERING_STANDARDS §2 healthcheck list (re-read: DB
+  integrity, migrations, upstream reachability, secrets, clock sanity,
+  last-snapshot age + [v2] operational state); LOOP_PROMPT Step 8 (whole-system
+  check = fresh-agent full suite + healthcheck + live smoke); S8 scheduling
+  playbook (exit-code honesty)
+- Probe evidence (Step 2b): N/A — no new upstream; integration tests run on
+  S3-S8 probe fixtures; the live smoke suite is the live component
+- Design notes / decisions: healthcheck completes all 9 checks (reachability +
+  clock via one Base block header; repo_state via fixed-argv git; operational
+  _state reports execution-disabled as the safe state, fails on orphan orders);
+  cross-section lifecycle test + 5 failure drills; RUNBOOK command/link
+  integrity enforced INSIDE make test; live suite marked `live`, gate runs
+  `-m "not live"`, `make smoke` runs it for real
+- Spec: docs/specs/S10-integration.md
