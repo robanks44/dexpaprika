@@ -75,6 +75,20 @@ dexpaprika db restore --json [--from <path>]   # verified restore; newest backup
 | `db migrate` exit 1 "rolled back" | bad migration file | DB unchanged and usable; fix the SQL, rerun |
 | `db restore` exit 1 "refusing restore" | backup corrupt | pick an older backup with `--from` |
 
+## Provider quotas (S2.5)
+
+```
+dexpaprika quota --json                  # all providers: window + month credits + pct_used
+dexpaprika quota --provider coinstats --json
+```
+
+- Every upstream call (S3+ clients) is checked and logged against `api_call_log`,
+  so spend survives restarts and is shared across processes.
+- `window_mode: credits` (Hyperliquid) means the per-minute limit counts WEIGHT,
+  not calls. CoinStats `wallet/defi*` costs 400 credits — scope to one chain, never "all".
+- A `credit-budget` denial cannot be waited out — it clears next UTC month.
+  Raise the budget in the `providers` table only if the paid plan actually changed.
+
 ## Gates (build sessions)
 
 ```
