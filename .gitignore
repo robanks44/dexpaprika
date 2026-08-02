@@ -1,0 +1,39 @@
+# --- secrets & env (never in history; see GIT_RULES.md §4) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+keystore*
+*.keystore
+secrets/
+# --- runtime data ---
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+data/
+logs/
+*.log
+# --- python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+# --- editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
