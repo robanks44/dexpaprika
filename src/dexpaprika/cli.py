@@ -3,9 +3,8 @@
 Exit codes: 0 ok, 1 operational failure, 2 usage error, 3 degraded.
 ``simulate``/``status`` and ``execute`` will be SEPARATE commands (S7/S9).
 
-S1 surface: ``status``, ``healthcheck``, ``wallets list|add|remove|include|exclude``.
-``healthcheck`` exits 0 only when ALL checks pass; checks not yet implemented
-report ``not-implemented`` and keep the overall state degraded (exit 3).
+``healthcheck`` exits 0 only when ALL nine §2 checks pass (S10 completed the
+set — reachability and clock sanity need network; the rest are offline).
 """
 
 from __future__ import annotations
@@ -151,6 +150,168 @@ def _check_migrations_current(settings: Settings) -> str:
     return "ok"
 
 
+def _check_last_snapshot_age(settings: Settings) -> str:
+    """Same rule as the S8 `snapshot-stale` alert — one truth, two surfaces."""
+    from datetime import UTC, datetime
+
+    path = db_path(settings)
+    if not path.exists():
+        return "fail: database missing — run `dexpaprika db migrate`"
+    conn = connect(path)
+    try:
+        row = conn.execute("SELECT MAX(ts) AS newest FROM snapshots").fetchone()
+    finally:
+        conn.close()
+    if row["newest"] is None:
+        return "fail: no snapshots recorded — run `dexpaprika snapshot`"
+    age_minutes = int(
+        (datetime.now(UTC) - datetime.fromisoformat(row["newest"])).total_seconds() // 60
+    )
+    if age_minutes > settings.snapshot_staleness_minutes:
+        return (
+            f"fail: newest snapshot is {age_minutes} min old"
+            f" (threshold {settings.snapshot_staleness_minutes}) — check the scheduled"
+            " recorder task, then run `dexpaprika snapshot`"
+        )
+    return "ok"
+
+
+def _check_repo_state(root: Path | None = None) -> str:
+    """Running uncommitted code is unverified code — flag a dirty checkout."""
+    import shutil
+    import subprocess
+
+    if root is None:
+        parents = Path(__file__).resolve().parents
+        # src layout: cli.py → dexpaprika → src → repo root (editable install).
+        root = parents[2] if len(parents) > 2 else parents[-1]
+    if not (root / ".git").exists():
+        return "ok (not a git checkout — installed package)"
+    git = shutil.which("git")
+    if git is None:
+        return "ok (git not available — repo state unverified)"
+    try:
+        result = subprocess.run(  # noqa: S603 — fixed argv, absolute binary, no shell
+            [git, "-C", str(root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"fail: could not verify repo state: {exc}"
+    if result.returncode != 0:
+        return f"fail: git status failed: {result.stderr.strip()}"
+    if result.stdout.strip():
+        return "fail: working tree has uncommitted changes — commit or stash before operating"
+    return "ok"
+
+
+def _check_operational_state(settings: Settings) -> str:
+    """§2 [v2]: mode, kill-switch, exposure vs limits — the pre-action self-check."""
+    from decimal import Decimal
+
+    path = db_path(settings)
+    if not path.exists():
+        return "fail: database missing — run `dexpaprika db migrate`"
+    conn = connect(path)
+    try:
+        row = conn.execute(
+            "SELECT e.state_json FROM positions p"
+            " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
+            " WHERE p.kind='perp' AND p.closed_at IS NULL"
+            " ORDER BY e.id DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        conn.close()
+    exposure = Decimal(0)
+    if row is not None:
+        state = json.loads(row["state_json"])
+        if state.get("size_usd"):
+            exposure = Decimal(str(state["size_usd"]))
+    limit = settings.max_position_usd
+    if limit > 0 and exposure > limit:
+        return (
+            f"fail: current short exposure ${exposure} exceeds configured"
+            f" max_position_usd ${limit} — do not act; resolve limits first"
+        )
+    mode = "read-only (execution not built; S9 gated on explicit go-ahead)"
+    limits = "disabled" if limit == 0 else f"max_position_usd=${limit}"
+    return f"ok: {mode}; limits {limits}; short exposure ${exposure}"
+
+
+def _check_network_health(settings: Settings) -> tuple[str, str]:
+    """(upstream_reachability, clock_sanity) — one cheap live call per upstream.
+
+    ntfy is deliberately excluded: publishing costs a real notification;
+    `dexpaprika alerts test` is its reachability check.
+    """
+    from datetime import UTC, datetime
+
+    from dexpaprika.chains import ChainRpcError, EvmRpcClient
+    from dexpaprika.clients.base import TransportError
+    from dexpaprika.clients.dexpaprika import DexPaprikaClient
+    from dexpaprika.clients.gmx import GmxClient
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    path = db_path(settings)
+    if not path.exists():
+        missing = "fail: database missing (quota accounting) — run `dexpaprika db migrate`"
+        return missing, missing
+    failures: list[str] = []
+    clock = "fail: Base block header unavailable — fix upstream_reachability first"
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        for chain, urls in (
+            ("base", settings.base_rpc_urls),
+            ("arbitrum", settings.arbitrum_rpc_urls),
+        ):
+            try:
+                client = EvmRpcClient(
+                    conn,
+                    chain,
+                    settings=settings,
+                    clients=[_http_client_factory(url) for url in urls],
+                )
+                if chain == "base":
+                    header = client.rpc("eth_getBlockByNumber", ["latest", False])
+                    skew = abs(datetime.now(UTC).timestamp() - int(str(header["timestamp"]), 16))
+                    clock = (
+                        "ok"
+                        if skew <= 300
+                        else (
+                            f"fail: local clock skews {int(skew)}s from Base chain time"
+                            " (>300s) — fix the system clock; staleness/cooldown windows"
+                            " are unreliable until then"
+                        )
+                    )
+                else:
+                    client.block_number()
+            except (ChainRpcError, TransportError, QuotaError) as exc:
+                failures.append(f"{chain}-rpc: {exc}")
+        try:
+            GmxClient(
+                conn,
+                settings=settings,
+                clients=[_http_client_factory(peer) for peer in settings.gmx_rest_peers],
+            ).get_markets()
+        except (TransportError, QuotaError) as exc:
+            failures.append(f"gmx: {exc}")
+        try:
+            DexPaprikaClient(
+                conn,
+                client=_http_client_factory(settings.dexpaprika_base_url),
+                settings=settings,
+            ).get_networks()
+        except (TransportError, QuotaError, ValueError) as exc:
+            failures.append(f"dexpaprika: {exc}")
+    finally:
+        conn.close()
+    reachability = "ok" if not failures else "fail: " + " | ".join(failures)
+    return reachability, clock
+
+
 def _cmd_healthcheck(*, as_json: bool) -> int:
     settings = Settings.load()
     checks = dict.fromkeys(_HEALTHCHECKS, "not-implemented")
@@ -158,7 +319,11 @@ def _cmd_healthcheck(*, as_json: bool) -> int:
     checks["data_dir_writable"] = _check_data_dir_writable(settings)
     checks["db_integrity"] = _check_db_integrity(settings)
     checks["migrations_current"] = _check_migrations_current(settings)
-    healthy = all(value == "ok" for value in checks.values())
+    checks["last_snapshot_age"] = _check_last_snapshot_age(settings)
+    checks["repo_state"] = _check_repo_state()
+    checks["operational_state"] = _check_operational_state(settings)
+    checks["upstream_reachability"], checks["clock_sanity"] = _check_network_health(settings)
+    healthy = all(value.startswith("ok") for value in checks.values())
     _emit(
         {
             "app": "dexpaprika",

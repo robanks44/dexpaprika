@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import subprocess
 import time
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -299,7 +300,7 @@ class TestFailureDrills:
         code, out = run_json(capsys, "snapshot", "--kind", "lp")
         assert code == EXIT_FAILURE
         assert "error" in out
-        with sqlite3.connect(_db_file(capsys)) as conn:
+        with closing(sqlite3.connect(_db_file(capsys))) as conn, conn:
             assert conn.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0] == 0
 
@@ -308,7 +309,7 @@ class TestFailureDrills:
     ) -> None:
         _bootstrap(capsys)
         old = (datetime.now(UTC) - timedelta(hours=3)).isoformat()
-        with sqlite3.connect(_db_file(capsys)) as conn:
+        with closing(sqlite3.connect(_db_file(capsys))) as conn, conn:
             conn.execute(
                 "INSERT INTO snapshots (ts, chain, block_number, kind) VALUES (?, 'base', 1, 'lp')",
                 (old,),
@@ -329,7 +330,7 @@ class TestFailureDrills:
     ) -> None:
         _bootstrap(capsys)
         run_json(capsys, "quota")  # seeds providers
-        with sqlite3.connect(_db_file(capsys)) as conn:
+        with closing(sqlite3.connect(_db_file(capsys))) as conn, conn:
             provider_id = conn.execute(
                 "SELECT id FROM providers WHERE name='dexpaprika'"
             ).fetchone()[0]
@@ -376,7 +377,8 @@ class TestDocIntegrity:
     def _runbook_commands(self) -> list[str]:
         commands = []
         in_block = False
-        for line in self.RUNBOOK.splitlines():
+        joined = self.RUNBOOK.replace("\\\n", " ")  # shell line continuations
+        for line in joined.splitlines():
             if line.strip().startswith("```"):
                 in_block = not in_block
                 continue
@@ -410,11 +412,12 @@ class TestDocIntegrity:
         texts = [self.RUNBOOK]
         for spec in sorted((REPO / "docs" / "specs").glob("*.md")):
             texts.append(spec.read_text(encoding="utf-8"))
-        pattern = re.compile(r"\b(?:docs|probes|src|tests)/[\w./-]+")
+        pattern = re.compile(r"(?<![\w-])(?:docs|probes|src|tests)/[\w./-]+")
         missing = {
             match
             for text in texts
             for match in pattern.findall(text)
-            if not (REPO / match.rstrip(".")).exists()
+            if "NNNN" not in match  # migration filename TEMPLATE, not a path
+            and not (REPO / match.rstrip("./")).exists()
         }
         assert not missing, f"docs reference nonexistent paths: {sorted(missing)}"

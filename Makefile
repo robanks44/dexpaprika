@@ -8,7 +8,7 @@
 #               schedule — new CVEs land after you pin.
 # `make gate`  — both.
 
-.PHONY: test lint type unit audit gate
+.PHONY: test lint type unit audit gate smoke
 
 test: lint type unit
 
@@ -27,3 +27,8 @@ audit:
 	uv run pip-audit
 
 gate: test audit
+
+# Read-only LIVE smoke suite (S10) — real network, throwaway data dir, sends
+# nothing. The live leg of the LOOP_PROMPT Step 8 whole-system check.
+smoke:
+	uv run pytest tests/live -m live --force-enable-socket --no-cov -q
