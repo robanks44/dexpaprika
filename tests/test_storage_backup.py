@@ -51,7 +51,7 @@ def test_backup_round_trip(db: tuple[Path, sqlite3.Connection], tmp_path: Path) 
 def test_backup_is_valid_while_db_in_use(
     db: tuple[Path, sqlite3.Connection], tmp_path: Path
 ) -> None:
-    path, conn = db
+    _path, conn = db
     backup_path = create_backup(conn, tmp_path / "b")
     check = sqlite3.connect(backup_path)
     try:
@@ -66,7 +66,7 @@ def test_restore_refuses_corrupt_backup(
     path, conn = db
     fake = tmp_path / "corrupt.db"
     fake.write_bytes(b"this is not a sqlite database at all")
-    with pytest.raises(BackupError, match="integrity|not a database"):
+    with pytest.raises(BackupError, match=r"integrity|not a database"):
         restore_backup(fake, path)
     # Live DB untouched.
     assert conn.execute("SELECT COUNT(*) AS n FROM providers").fetchone()["n"] == 1
@@ -83,9 +83,36 @@ def test_restore_keeps_pre_restore_copy(
 
 
 def test_backup_pruning_keeps_newest(db: tuple[Path, sqlite3.Connection], tmp_path: Path) -> None:
-    path, conn = db
+    _path, conn = db
     backup_dir = tmp_path / "b"
     paths = [create_backup(conn, backup_dir, keep=3) for _ in range(5)]
     remaining = sorted(backup_dir.glob("*.db"))
     assert len(remaining) == 3
     assert paths[-1] in remaining
+
+
+def test_latest_backup_empty_and_newest(
+    db: tuple[Path, sqlite3.Connection], tmp_path: Path
+) -> None:
+    from dexpaprika.storage.backup import latest_backup
+
+    backup_dir = tmp_path / "b"
+    assert latest_backup(backup_dir) is None
+    _path, conn = db
+    create_backup(conn, backup_dir)
+    newest = create_backup(conn, backup_dir)
+    assert latest_backup(backup_dir) == newest
+
+
+def test_backup_discarded_when_integrity_fails(
+    db: tuple[Path, sqlite3.Connection],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A backup that fails verification is deleted and reported (spec §backup)."""
+    monkeypatch.setattr("dexpaprika.storage.backup._integrity_ok", lambda _p: "boom")
+    _path, conn = db
+    backup_dir = tmp_path / "b"
+    with pytest.raises(BackupError, match="discarded"):
+        create_backup(conn, backup_dir)
+    assert list(backup_dir.glob("*.db")) == []
