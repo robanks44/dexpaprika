@@ -254,6 +254,68 @@ def _cmd_db(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _http_client_factory(base_url: str) -> Any:
+    """Real HTTP client for CLI-constructed API clients (tests monkeypatch this)."""
+    import httpx
+
+    return httpx.Client(base_url=base_url, timeout=30.0)
+
+
+def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.clients.base import TransportError
+    from dexpaprika.clients.dexpaprika import DexPaprikaClient
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first (quota tracking)"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        if pending(conn):
+            _emit(
+                {"error": "schema out of date — run `dexpaprika db migrate` first"},
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+        QuotaTracker(conn).ensure_providers()
+        client = DexPaprikaClient(
+            conn,
+            client=_http_client_factory(settings.dexpaprika_base_url),
+            settings=settings,
+        )
+        if args.market_command == "pool":
+            pool = client.get_pool(args.network, args.address)
+            payload: dict[str, Any] = {"pool": pool.model_dump(mode="json", exclude={"raw"})}
+            if args.record:
+                client.record_pool_metrics(pool)
+                payload["recorded"] = True
+        else:  # ohlcv
+            candles = client.get_ohlcv(
+                args.network,
+                args.address,
+                start=args.start,
+                interval=args.interval,
+                limit=args.limit,
+            )
+            payload = {"candles": [c.model_dump(mode="json") for c in candles]}
+            if args.record:
+                payload["recorded"] = client.record_ohlcv(
+                    args.network, args.address, args.interval, candles
+                )
+    except (TransportError, QuotaError, ValueError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_quota(args: argparse.Namespace, *, as_json: bool) -> int:
     from dexpaprika.quota import QuotaError, QuotaTracker
 
@@ -347,6 +409,24 @@ def build_parser() -> argparse.ArgumentParser:
     quota.add_argument("--provider", default=None, help="Limit to one provider.")
     _add_json_flag(quota)
 
+    market = subparsers.add_parser(
+        "market", help="DexPaprika market data (history/volume — NOT hedge-math prices)."
+    )
+    market_sub = market.add_subparsers(dest="market_command", required=True)
+    m_pool = market_sub.add_parser("pool", help="Pool details (volume, txns; fee often null).")
+    m_pool.add_argument("--network", required=True)
+    m_pool.add_argument("--address", required=True)
+    m_pool.add_argument("--record", action="store_true", help="Persist to pool_metrics.")
+    _add_json_flag(m_pool)
+    m_ohlcv = market_sub.add_parser("ohlcv", help="Candles for a pool.")
+    m_ohlcv.add_argument("--network", required=True)
+    m_ohlcv.add_argument("--address", required=True)
+    m_ohlcv.add_argument("--start", required=True, help="YYYY-MM-DD")
+    m_ohlcv.add_argument("--interval", default="24h")
+    m_ohlcv.add_argument("--limit", type=int, default=30)
+    m_ohlcv.add_argument("--record", action="store_true", help="Upsert into ohlcv table.")
+    _add_json_flag(m_ohlcv)
+
     return parser
 
 
@@ -361,6 +441,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_db(args, as_json=args.as_json)
     if args.command == "quota":
         return _cmd_quota(args, as_json=args.as_json)
+    if args.command == "market":
+        return _cmd_market(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 
