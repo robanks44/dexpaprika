@@ -512,3 +512,63 @@
 - Coverage: 94.92% total; clients/btc.py 100% | all static clean
 - Completed: 2026-08-02
 - Deferred: Solana client — new section when Richard provides the address
+
+### S9 — Hedge order execution (PRIVILEGED) — `complete` (armed path UNEXERCISED — supervised session pending)
+- Attempts: 1
+- Branch: `section/s9-execution` | Merge commit: — | Tag: —
+- GO-AHEAD RECORDED: Richard, "start s9", 2026-08-02. Decisions: subaccount +
+  official-SDK sidecar custody (research-backed; community Python SDK rejected
+  — no SL/edit/cancel/subaccount); approve-every-order via ntfy; limits
+  $20k/$5k/4-per-day/ETH-USD-only; supervised SL-nudge as the live exercise
+- Reference docs read: ENGINEERING_STANDARDS §4 (full); gmx-python-sdk
+  reference (evaluated, rejected for writes); official GMX SDK v2 docs
+  (executeExpressOrder/prepareEditOrder/prepareCancelOrder/submitOrder with
+  native idempotencyKey, subaccount lifecycle, express relay); ntfy reference
+  (poll-based approval loop); OWASP Agentic Top 10 2026 (review logged in spec)
+- Probe evidence (Step 2b): probes/out/s9/sdk_fetch_orders.json — pinned
+  @gmx-io/sdk@1.6.4 live read-only from the sidecar: returned the REAL SL
+  order 0xc7c1...e642 (orderType 6, short, trigger 1925e12 — 1e12 scaling
+  re-confirmed, uint256max full-close sentinel). SDK ESM build broken
+  (extensionless imports) — sidecar uses the CJS entry, probe-verified
+- Design notes / decisions: Python owns every safeguard, Node sidecar is a
+  dumb prepare/submit tool (stdin JSON in, stdout JSON out, key env only in
+  submit mode); gate chain kill-switch -> armed -> hard limits -> approval;
+  audit intent->simulation->submission->confirmation with blocked/rejected;
+  idempotency = sha256(action|params|hour-bucket) + stored-response replay;
+  post-condition verify, auto-trip kill switch; OWASP ASI02/03/08/09/10
+  mitigations mapped in spec
+- Spec: docs/specs/S9-execution.md
+- Test summary (written before code): 40 tests — every safeguard BLOCKS
+  (dry-run default: submit call impossible; --arm without armed file; armed
+  file expiry; kill switch blocks before any sidecar contact, arm refuses
+  while tripped, no code path removes the file, auto-trip on 3 consecutive
+  failures + on post-condition mismatch; each hard limit: position/delta/
+  market/daily-count/rate; approval rejection + timeout fail-closed +
+  substantive message; idempotency hour-bucket + stored-response replay +
+  crash-restart same-key resubmit; audit completeness property: no
+  submission without prior intent), approval loop unit tests, instruction
+  validation, ntfy poll (NDJSON, topic hygiene incl. endpoint label +
+  error redaction), CLI scope tests
+- Build-run evidence: LIVE dry-run e2e in-sandbox — `execute set-sl-trigger
+  --price 1926` (no --arm): real SL order key auto-resolved via sidecar
+  read, real prepareEditOrder request built (request_id from GMX API),
+  trigger 1926e30 in plan, NOTHING submitted, exit 0
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 1ee8c5b, make test
+  PASS (386 passed; coverage 92.90%, execute/* all >=90%), make audit PASS;
+  adversarial safety review traced execute_instruction line-by-line: NO path to
+  submit without kill-clear + ARMED file + --arm + limits + id-bound approval; no
+  code removes the kill switch; key only in submit-mode subprocess env; live
+  dry-run e2e reproduced independently (real order key, 1926e30 plan, zero
+  submission rows, no ntfy contact, no ARMED/KILL files)
+- Verifier findings fixed pre-merge (test-change justification: hardening from
+  verifier findings): #1 Python-side hard param ranges (trigger (0,1e6), target
+  [0,100] ETH, 32-byte order keys); #2 `execute arm` now audited; #3 submission
+  rate-limit window spans midnight; #5 kill switch halts the read-only key
+  auto-resolution too. Finding #4 (SDK error strings in audit payloads) on file
+  for the supervised session review
+- Coverage: 92.85% total; approval 100%, safety 95%, engine 93%, instruction 92%
+- Completed (dry-run scope): 2026-08-02
+- PENDING WITH RICHARD (supervised session): subaccount generation + his one
+  authorization tx + gmx_subaccount_key storage + the $1 SL nudge through the
+  full approval flow (then nudge back); resize-short submit enabled at that
+  session; live path stays fail-closed until then

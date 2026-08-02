@@ -88,5 +88,27 @@ class NtfyClient:
         raw.pop("topic", None)  # receipt echoes the topic; strip before it leaves here
         return PublishReceipt.model_validate(raw)
 
+    def poll(self, since_unix: int) -> list[str]:
+        """Messages published to the topic since ``since_unix`` (approval replies).
+
+        The subscribe API puts the topic in the PATH — the endpoint label keeps
+        it out of api_call_log, and errors re-raise with the topic redacted so
+        hygiene holds on this path too.
+        """
+        try:
+            items = self._transport.get_ndjson(
+                f"/{self.__topic}/json",
+                params={"poll": "1", "since": str(since_unix)},
+                endpoint_label="poll",
+            )
+        except Exception as exc:
+            redacted = str(exc).replace(self.__topic, "REDACTED")
+            raise type(exc)(redacted) from None
+        return [
+            str(item.get("message", ""))
+            for item in items
+            if isinstance(item, dict) and item.get("event") == "message"
+        ]
+
     def __repr__(self) -> str:
         return "NtfyClient(topic=REDACTED)"

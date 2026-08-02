@@ -27,11 +27,11 @@ def test_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.log_level == "INFO"
     assert s.secret_backend == "auto"  # noqa: S105 — backend selector, not a password
     assert s.dexpaprika_base_url == "https://api.dexpaprika.com"
-    # S9 disabled by default: zero limits, no markets.
-    assert s.max_position_usd == Decimal("0")
-    assert s.max_delta_per_run_usd == Decimal("0")
-    assert s.max_daily_adjustments == 0
-    assert s.allowed_markets == []
+    # S9 hard limits (Richard, 2026-08-02): enforced-in-code caps.
+    assert s.max_position_usd == Decimal("20000")
+    assert s.max_delta_per_run_usd == Decimal("5000")
+    assert s.max_daily_adjustments == 4
+    assert s.allowed_markets == ["ETH/USD"]
 
 
 def test_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
