@@ -131,3 +131,72 @@ def test_record_position_end_to_end(conn: sqlite3.Connection) -> None:
     assert state["tick_lower"] == -202000
     assert state["custody"] == "sickle"
     assert Decimal(state["amount0"]) > 0
+
+
+def _sel_arg(sig: str, *args: str) -> str:
+    from dexpaprika.chains.abi import selector
+
+    return selector(sig) + "".join(args)
+
+
+def _addr_word(address: str) -> str:
+    return f"{int(address, 16):064x}"
+
+
+def test_gauge_staked_position_discovered_and_deduped(conn: sqlite3.Connection) -> None:
+    """Gauge path finds a staked id; dedup keeps one row when sickle also holds it."""
+    gauge = PROBE["gauge"].lower()
+    staked_one = (
+        "0x"
+        + f"{32:064x}"  # offset
+        + f"{1:064x}"  # length
+        + f"{5056427:064x}"
+    )
+    overrides = {
+        f"{gauge}|{_sel_arg('stakedValues(address)', _addr_word(PROBE['sickle']))}": staked_one
+    }
+    rpc = make_rpc(conn, replay_handler(overrides))
+    positions = discover(rpc, WALLET, settings=Settings.load(), block=PROBE["pin"])
+    assert len(positions) == 1  # deduped: sickle enumeration already found it
+
+
+def test_pool_unresolved_flags_without_valuing(conn: sqlite3.Connection) -> None:
+    factory = PROBE["factory_second"].lower()
+    pos = PROBE["positions"][0]
+    key = f"{factory}|" + _sel_arg(
+        "getPool(address,address,int24)",
+        _addr_word(pos["token0"]),
+        _addr_word(pos["token1"]),
+        f"{pos['tick_spacing']:064x}",
+    )
+    rpc = make_rpc(conn, replay_handler({key: ZERO_WORD}))
+    positions = discover(rpc, WALLET, settings=Settings.load(), block=PROBE["pin"])
+    p = positions[0]
+    assert p.pool_unresolved is True
+    assert p.amount0 is None
+    assert any("unresolved" in w for w in p.warnings)
+
+
+def test_unknown_token_decimals_records_raw_only(conn: sqlite3.Connection) -> None:
+    """A pair outside the decimals registry is recorded but never mis-valued."""
+    nfpm = PROBE["positions"][0]["nfpm"].lower()
+    pos_key = f"{nfpm}|" + _sel_arg("positions(uint256)", f"{5056427:064x}")
+    original = RAW[pos_key]
+    # Swap token0 for an unknown token address (word 2).
+    words = [original[2:][i : i + 64] for i in range(0, len(original) - 2, 64)]
+    words[2] = f"{int('0x' + 'ab' * 20, 16):064x}"
+    patched = "0x" + "".join(words)
+    # getPool for the new pair still resolves to the known pool.
+    factory = PROBE["factory_second"].lower()
+    pool_key = f"{factory}|" + _sel_arg(
+        "getPool(address,address,int24)",
+        words[2][-64:],
+        _addr_word(PROBE["positions"][0]["token1"]),
+        f"{PROBE['positions'][0]['tick_spacing']:064x}",
+    )
+    pool_word = f"{int(PROBE['resolved_pool'], 16):064x}"
+    rpc = make_rpc(conn, replay_handler({pos_key: patched, pool_key: "0x" + pool_word}))
+    positions = discover(rpc, WALLET, settings=Settings.load(), block=PROBE["pin"])
+    p = positions[0]
+    assert p.amount0 is None
+    assert any("decimals" in w for w in p.warnings)

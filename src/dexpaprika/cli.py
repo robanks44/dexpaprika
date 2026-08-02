@@ -320,6 +320,77 @@ def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_lp(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.chains import ChainRpcError, EvmRpcClient
+    from dexpaprika.lp.discovery import discover, record
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first (quota tracking)"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    if args.address:
+        wallets = [args.address]
+    else:
+        wallets = [
+            w.address
+            for w in _registry(settings).list_wallets()
+            if w.chain_family == "evm" and w.included
+        ]
+        if not wallets:
+            _emit(
+                {"error": "no included EVM wallets in the registry — pass --address"},
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        rpc = EvmRpcClient(
+            conn,
+            "base",
+            settings=settings,
+            clients=[_http_client_factory(url) for url in settings.base_rpc_urls],
+        )
+        pin = rpc.resolve_pin()
+        all_positions = []
+        recorded = 0
+        ts = None
+        for wallet in wallets:
+            for position in discover(rpc, wallet, settings=settings, block=pin):
+                all_positions.append(position.model_dump(mode="json"))
+                if args.record:
+                    from datetime import UTC, datetime
+
+                    ts = ts or datetime.now(UTC).isoformat()
+                    record(conn, wallet, position, ts)
+                    recorded += 1
+        payload: dict[str, Any] = {
+            "block_number": pin,
+            "wallets": wallets,
+            "positions": all_positions,
+        }
+        if args.record:
+            from datetime import UTC, datetime
+
+            conn.execute(
+                "INSERT INTO snapshots (ts, chain, block_number, kind) VALUES (?, 'base', ?, 'lp')",
+                (ts or datetime.now(UTC).isoformat(), pin),
+            )
+            payload["recorded"] = recorded
+    except (ChainRpcError, QuotaError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_chain(args: argparse.Namespace, *, as_json: bool) -> int:
     from dexpaprika.chains import ChainRpcError, EvmRpcClient
     from dexpaprika.quota import QuotaError, QuotaTracker
@@ -550,6 +621,13 @@ def build_parser() -> argparse.ArgumentParser:
     c_snap.add_argument("--chain", default="all", choices=("base", "arbitrum", "all"))
     _add_json_flag(c_snap)
 
+    lp = subparsers.add_parser("lp", help="CL LP positions (custody-aware discovery).")
+    lp_sub = lp.add_subparsers(dest="lp_command", required=True)
+    lp_snap = lp_sub.add_parser("snapshot", help="Discover + value LP positions at one pin.")
+    lp_snap.add_argument("--address", default=None, help="Default: all included EVM wallets.")
+    lp_snap.add_argument("--record", action="store_true", help="Persist positions + snapshot row.")
+    _add_json_flag(lp_snap)
+
     return parser
 
 
@@ -570,6 +648,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_gmx(args, as_json=args.as_json)
     if args.command == "chain":
         return _cmd_chain(args, as_json=args.as_json)
+    if args.command == "lp":
+        return _cmd_lp(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

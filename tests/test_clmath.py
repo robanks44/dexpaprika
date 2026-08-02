@@ -44,13 +44,20 @@ def test_amounts_match_probe_computed_values() -> None:
     assert usdc == Decimal(PROBE["computed"]["usdc"])
 
 
+def test_band_prices_match_live_verified_values() -> None:
+    """§0.1(a) live-verified: ticks -202000..-200000 = $1,689.24..$2,063.22."""
+    assert price_from_tick(-202000).quantize(Decimal("0.01")) == Decimal("1689.24")
+    assert price_from_tick(-200000).quantize(Decimal("0.01")) == Decimal("2063.22")
+
+
 def test_below_range_is_all_token0() -> None:
     sqrt_price = tick_to_sqrt_price(LOWER - 1000)
     amount0, amount1 = position_amounts(L, LOWER, UPPER, sqrt_price)
     assert amount1 == 0
-    assert amount0 > 0
-    # Richard's verified all-WETH maximum ≈ 9.01 ETH.
-    assert (amount0 / Decimal(10**18)).quantize(Decimal("0.01")) == Decimal("9.01")
+    # Formula-derived all-WETH maximum: 9.23 ETH. (VERIFIED_FINDINGS' "≈9.01"
+    # was an ESTIMATE made before tickLower/tickUpper were known — the exact
+    # bounds are now anchored by the live-verified band prices above.)
+    assert (amount0 / Decimal(10**18)).quantize(Decimal("0.01")) == Decimal("9.23")
 
 
 def test_above_range_is_all_token1() -> None:
