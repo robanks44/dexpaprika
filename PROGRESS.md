@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S2 complete — next: S2.5 provider quota tracker
+- Current section: S2.5 — provider quota tracker — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -164,3 +164,21 @@
 - Completed: 2026-08-02
 - Fix during implementation worth remembering: SQL header comments contained ';' —
   the statement splitter now strips `--` comments BEFORE splitting (test caught it)
+
+### S2.5 — Provider quota tracker — `in_progress`
+- Attempts: 1
+- Branch: `section/s2-5-quota-tracker` | Merge commit: — | Tag: —
+- Reference docs read: REFERENCE_INDEX §3b (design implemented as specified);
+  coinstats--api-reference.md (400cr/DeFi call, budget guard, 80% alert);
+  krystal--api-reference--client.md (pacing/weights); §0/§0.1 re-read
+- Probe evidence (Step 2b): N/A — local accounting only; seed values from
+  session-verified docs, re-probed per client at S3+
+- Design notes / decisions: sliding window computed from api_call_log (DB-backed ⇒
+  per-upstream enforcement across instances, §3b); credit budgets per UTC calendar
+  month; longest-fnmatch-pattern wins for endpoint weights; 80% alerting deferred to
+  S8 rules (tracker reports pct_used)
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
