@@ -195,3 +195,25 @@ class TestCircuitBreaker:
         clk.advance(61)
         payload = transport.get_json("/e")
         assert payload == {}
+
+
+def test_connection_errors_retry_then_succeed(conn: sqlite3.Connection) -> None:
+    attempts = 0
+
+    def handle(_req: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 2:
+            msg = "connection refused"
+            raise httpx.ConnectError(msg)
+        return httpx.Response(200, text='{"ok": true}')
+
+    transport, _clk, _slept = make_transport(conn, httpx.MockTransport(handle))
+    payload = transport.get_json("/net")
+    assert isinstance(payload, dict)
+    assert payload["ok"] is True
+    assert attempts == 2
+    # The failed attempt was still logged (status NULL).
+    rows = conn.execute("SELECT status FROM api_call_log ORDER BY id").fetchall()
+    assert rows[0]["status"] is None
+    assert rows[-1]["status"] == 200

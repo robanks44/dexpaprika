@@ -78,7 +78,9 @@ def test_market_ohlcv_record(capsys: pytest.CaptureFixture[str], mock_api: None)
     )
     assert code == EXIT_OK
     assert isinstance(out["candles"], list)
-    assert out["recorded"] >= 5
+    recorded = out["recorded"]
+    assert isinstance(recorded, int)
+    assert recorded >= 5
 
 
 def test_market_record_requires_migrated_db(
