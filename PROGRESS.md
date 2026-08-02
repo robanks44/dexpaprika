@@ -472,7 +472,7 @@
 - Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
 - Completed: 2026-08-02
 
-### S5.5 — BTC holdings client (BTC-only) — `in-progress`
+### S5.5 — BTC holdings client (BTC-only) — `complete`
 - Attempts: 1
 - Branch: `section/s55-btc` | Merge commit: — | Tag: —
 - Scope: Richard provided BTC address bc1qwku...7ff (validated bech32 P2WPKH)
@@ -496,3 +496,13 @@
   idempotent holdings upsert with two observations, CLI e2e (EVM+BTC
   holdings snapshot -> report shows BTC row; btc-only registry works;
   excluded BTC wallet skipped)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 3f1b65a, make test
+  PASS (346 passed; coverage 94.92%), make audit PASS; adversarial review: no
+  blocking defects (one noted hypothetical: btc-only registry + --kind all writes an
+  empty hedge snapshot row — not reachable with the real registry; on file for a
+  future tidy-up); LIVE SMOKE: real snapshot recorded holdings 5 (4 EVM + 1 BTC),
+  report shows BTC 0.00131828 chain=bitcoin source=esplora:blockstream, healthcheck
+  stays healthy; probe re-fetched live and byte-identical
+- Coverage: 94.92% total; clients/btc.py 100% | all static clean
+- Completed: 2026-08-02
+- Deferred: Solana client — new section when Richard provides the address
