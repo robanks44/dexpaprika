@@ -6,8 +6,8 @@
 
 ## Status
 
-- Phase: `setup`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S0 complete — awaiting Richard's handoff approval (setup Step 5)
+- Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
+- Current section: S1 — config, secrets & wallet registry — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -27,7 +27,7 @@
 - [x] ARCHITECTURE.md written
 - [x] SECTION_PLAN.md written
 - [x] Scaffold complete; suite + static gates verified clean by fresh agent (2026-08-02)
-- [ ] Richard approved handoff report
+- [x] Richard approved handoff report (2026-08-02: "begin")
 
 ## Scope confirmations (Richard, 2026-08-02)
 
@@ -108,3 +108,15 @@
 - 2026-08-02 | Repo canonical copy lives in the Cowork session + (once PAT lands) GitHub;
   a zip snapshot is delivered to Richard's project folder at setup handoff | .git object
   trees don't transfer cleanly file-by-file over the device bridge | committing .git piecemeal
+
+### S1 — Config, secrets & wallet registry — `in_progress`
+- Attempts: 1
+- Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
+- Reference docs read: — (Step 2 pending)
+- Probe evidence (Step 2b): — (pending assessment)
+- Design notes / decisions: —
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
