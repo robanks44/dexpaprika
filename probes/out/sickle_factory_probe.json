@@ -1,0 +1,16 @@
+{
+ "sickles(address)": "0x0000000000000000000000006c1b20062970c886082687d8121d06aaace8886e",
+ "sickleOf(address)": {
+  "error": "execution reverted"
+ },
+ "predict(address)": "0x0000000000000000000000006c1b20062970c886082687d8121d06aaace8886e",
+ "getSickle(address)": {
+  "error": "execution reverted"
+ },
+ "deployedSickles(address)": {
+  "error": "execution reverted"
+ },
+ "getOrDeploy(address)": {
+  "error": "execution reverted"
+ }
+}

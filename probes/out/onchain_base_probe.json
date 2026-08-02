@@ -1,0 +1,75 @@
+{
+ "block_number": {
+  "hex": "0x2f215e3",
+  "int": 49419747,
+  "rpc": "https://base-rpc.publicnode.com"
+ },
+ "block_pin": "0x2f215e0",
+ "pool_slot0_raw": "0x00000000000000000000000000000000000000000002cfca339a96f931655288fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcee4a00000000000000000000000000000000000000000000000000000000000000c8000000000000000000000000000000000000000000000000000000000000016800000000000000000000000000000000000000000000000000000000000001680000000000000000000000000000000000000000000000000000000000000001",
+ "pool_decoded": {
+  "sqrtPriceX96": 3399111461936603605586568,
+  "tick": -201142,
+  "price_usd_per_weth": 1840.56
+ },
+ "tickSpacing": 500,
+ "pool_liquidity": 67031425751995518,
+ "nfpm2_positions_raw": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004200000000000000000000000000000000000006000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda0291300000000000000000000000000000000000000000000000000000000000001f4fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffceaf0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcf2c0000000000000000000000000000000000000000000000000000e2a884af050f400000000000000000000000000000112b6e084e0c9726d293c4313261c9ba9860000000000000000000000000000000000000976e62f1325bd8473877ebc487400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+ "nfpm2_positions_decoded": {
+  "token0": "0x4200000000000000000000000000000000000006",
+  "token1": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  "tickSpacing": 500,
+  "tickLower": -202000,
+  "tickUpper": -200000,
+  "liquidity": 3987414535131380
+ },
+ "nfpm2_ownerOf_5056427": "0x6c1b20062970c886082687d8121d06aaace8886e",
+ "proxy_code": "0x363d3d373d3d3d363d73fff75d099baee29f447866bc5299cd67c04761c85af43d82803e903d91602b57fd5bf3",
+ "eip1167_implementation": "0xfff75d099baee29f447866bc5299cd67c04761c8",
+ "impl_code_len_bytes": 3042,
+ "proxy_owner": "0x000000000000000000000000c155a616e39d7b83e37e8fd9d2106e1bc056d7fe",
+ "proxy_name": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_symbol": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_token0": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_token1": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_pool": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_nft": {
+  "__error__": "HTTP Error 429: Too Many Requests"
+ },
+ "proxy_tokenId": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ },
+ "proxy_gauge": {
+  "__error__": {
+   "code": 3,
+   "message": "execution reverted"
+  }
+ }
+}
