@@ -1,0 +1,109 @@
+{
+  "providers": [
+    {
+      "name": "dexpaprika",
+      "base_url": "https://api.dexpaprika.com",
+      "rate_limit": 30,
+      "rate_period": "minute",
+      "has_credits": true,
+      "credit_limit": 200000,
+      "free_tier": true,
+      "endpoint_costs": {}
+    },
+    {
+      "name": "gmx",
+      "base_url": "https://arbitrum.gmxapi.io/v1",
+      "rate_limit": 120,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "No documented ceiling (VERIFIED_FINDINGS §2) — conservative default; poll minutes-scale."
+    },
+    {
+      "name": "krystal",
+      "base_url": "https://cloud-api.krystal.app/v1",
+      "rate_limit": 60,
+      "rate_period": "minute",
+      "has_credits": true,
+      "credit_limit": 50000,
+      "free_tier": true,
+      "endpoint_costs": {
+        "*": 10
+      },
+      "note": "~0.6s pacing in reference client; ~10 units/call default weight."
+    },
+    {
+      "name": "coinstats",
+      "base_url": "https://openapiv1.coinstats.app",
+      "rate_limit": 10,
+      "rate_period": "minute",
+      "has_credits": true,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {
+        "wallet/defi*": 400,
+        "coins*": 2
+      },
+      "note": "Credit plans vary — no cap seeded; wallet/defi verified 400 credits/call, scope to ONE chain."
+    },
+    {
+      "name": "etherscan",
+      "base_url": "https://api.etherscan.io/v2/api",
+      "rate_limit": 5,
+      "rate_period": "second",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {}
+    },
+    {
+      "name": "zerion",
+      "base_url": "https://api.zerion.io/v1",
+      "rate_limit": 10,
+      "rate_period": "second",
+      "has_credits": true,
+      "credit_limit": 2000,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "sync=true is a CORRECTNESS rule (§0.1b), independent of quota."
+    },
+    {
+      "name": "hyperliquid",
+      "base_url": "https://api.hyperliquid.xyz",
+      "rate_limit": 1200,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {
+        "clearinghouseState": 2
+      },
+      "config": {
+        "window": "credits"
+      },
+      "note": "Weight-based rate window: 1200 WEIGHT/min per IP, not 1200 calls."
+    },
+    {
+      "name": "geckoterminal",
+      "base_url": "https://api.geckoterminal.com/api/v2",
+      "rate_limit": 30,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {}
+    },
+    {
+      "name": "coingecko",
+      "base_url": "https://api.coingecko.com/api/v3",
+      "rate_limit": 10,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {}
+    }
+  ]
+}
