@@ -1,0 +1,106 @@
+SETUP PROMPT — paste this as the first message in the dexpaprika project chat
+==============================================================================
+
+You are setting up the ideal environment for the dexpaprika coding project. Do NOT write
+any application code in this session-phase. Your job is research, design, scaffolding, and
+a section plan. Application coding happens later via LOOP_PROMPT.md, one section at a time.
+
+PROJECT PURPOSE
+A DeFi investor system for: (1) portfolio analysis, (2) data recording, and (3) active
+management of a short hedge position on GMX, ensuring the hedge always protects the
+downside risk of my LP (liquidity provider) positions. It is named after the DexPaprika
+market-data API (https://docs.dexpaprika.com), a primary data source.
+
+Critical constraints:
+- Claude will interface with this system, not me directly. It must be fully operable and
+  fully testable by Claude alone — CLI-first, JSON output, health checks, runbook.
+- Security and reliability are extremely important. It runs on my machine now and must
+  migrate cleanly to cloud operation later.
+- Strict TDD: for every section, tests are written before implementation, and a FRESH
+  agent independently runs the tests. Any failure restarts that section's loop. All tests
+  must pass, with no action from me.
+
+STEP 0 — READ THE LOOP FILES
+Read every file in the dexpaprika-loop folder: README.md, ENGINEERING_STANDARDS.md,
+LOOP_PROMPT.md, REFERENCE_INDEX.md, GIT_RULES.md, PROGRESS.md. ENGINEERING_STANDARDS.md
+and GIT_RULES.md are binding for everything you design here. Reference ground truth is
+the CONTEXT library (updated 2026-08-01): connect C:\Users\NoBloat\COWORK\CONTEXT —
+it contains reference\ (indexed technical docs incl. the 11 dexpaprika gap-fill docs),
+APIDOCS\, and encylopedia Uig\. If the loop folder, the project folder, or the CONTEXT
+library are not accessible in this session, STOP and ask me to connect them before
+continuing. (The old PROJECTS\UIG mirrors are deprecated — do not request them.)
+
+STEP 1 — CONFIRM SCOPE WITH ME (use AskUserQuestion)
+FIRST read dexpaprika-context-docs\VERIFIED_FINDINGS.md (see REFERENCE_INDEX.md §0) —
+the 2026-07-31 session already answered much of (a)-(d): Aerodrome SlipStream LP on Base
+(pool + wallet addresses recorded), ETH short on GMX Arbitrum with SL at $1925, hourly LP
+cadence, minutes-scale hedge polling, ntfy topic, alert-only start with approval-gated
+execution designed for later. Present those as defaults to CONFIRM, not open questions —
+only ask fresh what the findings don't cover (e.g. Step 1e git remote). The custody blocker (LP range bounds tickLower/tickUpper) is PARTIALLY resolved and is
+STILL OPEN — read REFERENCE_INDEX.md §0.1(a) before designing LP discovery. The CLGauge
+recipe (Voter.gauges → stakedValues → NFPM.positions) is a valid path but returns NOTHING
+for Richard's actual position: NFT #5056427 sits on a SECOND Slipstream deployment
+(0xa990c6a7...) and is custodied by an EIP-1167 proxy (0x6c1b2006...) that is not a gauge.
+The ticks ARE readable (-202000..-200000 = $1,689-$2,063/WETH, in range, verified live).
+Resolve the general discovery mechanism during research, and PROBE before designing.
+Before designing, confirm at minimum:
+a) Which chains/protocols my LP positions live on (e.g. Solana Orca/Raydium/Kamino, Base
+   Aerodrome, Uniswap v3 — the reference docs cover several) and how positions should be
+   discovered (wallet addresses read-only? Krystal? manual entry?).
+b) Hedge management depth: analysis + recommendations only (read-only), or also placing/
+   adjusting GMX orders programmatically? (Order execution is a privileged capability with
+   extra safeguards per ENGINEERING_STANDARDS.md §4 — and needs my explicit opt-in.)
+c) Which wallets/accounts to track, and where the system should run day-to-day for now.
+d) Snapshot cadence for data recording, and what alerts/reports I want Claude to surface.
+e) Git remote: set up a private GitHub repo as off-machine backup (recommended, per
+   GIT_RULES.md §1.6)? If yes, I'll provide a fine-grained PAT for the credential store.
+
+STEP 2 — RESEARCH (before any design decisions)
+- Read REFERENCE_INDEX.md and skim the mapped docs enough to know what exists locally.
+- Read the school material index (encylopedia Uig) — hedge/LP risk logic must later be
+  reconciled against it.
+- Fetch CURRENT docs for: DexPaprika API (endpoints, rate limits), GMX v2 REST API +
+  Python SDK options, and verify the local mirrors aren't stale. Use Context7/WebFetch.
+  NOTE: there is NO official GMX Python SDK — the official SDK is TypeScript. Plan a typed
+  REST client against https://{chain}.gmxapi.io/v1 + the gmxinfra.io oracle API.
+- PROBE, don't assume. For every external source in the plan, make one real call with
+  Richard's wallet and dump the raw payload before designing against it (LOOP_PROMPT
+  Step 2b). REFERENCE_INDEX §0.1 is four findings that only probing surfaced.
+- Research current (2026) best practices for: secure Python service design, uv-based
+  project tooling, offline-testable API clients, and SQLite→Postgres/Timescale migration.
+  Where my standards file and current best practice differ, flag it to me.
+
+STEP 3 — DESIGN
+Produce and save in the repo:
+- ARCHITECTURE.md: components (data clients, storage, portfolio engine, hedge engine,
+  CLI, scheduler), data flow, DB schema draft, config/secrets design, cloud migration
+  path, and the privileged-action safety design if order execution is in scope.
+- SECTION_PLAN.md: an ordered, dependency-aware list of build sections sized so one
+  section = one loop iteration. Suggested shape (adjust from your research + my answers):
+    S0 scaffold & tooling, S1 config & secrets, S2 storage & migrations,
+    S2.5 provider quota tracker (REFERENCE_INDEX §3b — S3/S4/S5 all depend on it;
+         retrofitting it later means touching every client),
+    S3 DexPaprika client, S4 GMX data client, S5 LP position tracking & valuation,
+    S6 portfolio analysis & recording jobs, S7 hedge coverage engine (school-material
+    reconciled), S8 reporting/alerts for Claude, S9 [if approved] hedge order execution
+    with safeguards, S10 whole-system integration & runbook, S11 cloud packaging.
+  Each section entry: goal, interfaces, reference docs (from REFERENCE_INDEX.md), test
+  focus, done-criteria.
+
+STEP 4 — SCAFFOLD (no application logic)
+Set up the repo skeleton per ENGINEERING_STANDARDS.md and GIT_RULES.md §1, in this order:
+git init on main with the loop bot identity → commit .gitignore FIRST → pre-commit hooks
+(secret scan, ruff, large-file check) → initial commit → then build out: uv project with
+pinned Python 3.13, src/ layout, ruff + mypy(strict) + pytest + coverage + hypothesis +
+pytest-socket, empty CLI entrypoint with --json/status/healthcheck stubs, Dockerfile +
+compose, .env.example, CI-ready test command (single `make test` or `uv run poe test`
+style) — each as clean conventional commits. Copy the dexpaprika-loop files into the repo
+(e.g. under loop/) and initialize PROGRESS.md. Configure the remote and push if approved
+in Step 1e. Verify the empty suite + all static gates run clean end-to-end with zero
+input from me, then tag S0 per GIT_RULES.md once the fresh-agent check passes. Finish
+with a clean working tree.
+
+STEP 5 — HANDOFF
+Report back: scope confirmations, key research findings (with sources), the section plan,
+scaffold verification output, and any open risks. Then STOP and wait for my approval.
+After I approve, each build iteration starts by pasting loop/LOOP_PROMPT.md.
