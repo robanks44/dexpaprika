@@ -179,7 +179,7 @@ def _check_last_snapshot_age(settings: Settings) -> str:
 def _check_repo_state(root: Path | None = None) -> str:
     """Running uncommitted code is unverified code — flag a dirty checkout."""
     import shutil
-    import subprocess
+    import subprocess  # nosec B404 — read-only `git status`, fixed argv, no shell
 
     if root is None:
         parents = Path(__file__).resolve().parents
@@ -191,7 +191,7 @@ def _check_repo_state(root: Path | None = None) -> str:
     if git is None:
         return "ok (git not available — repo state unverified)"
     try:
-        result = subprocess.run(  # noqa: S603 — fixed argv, absolute binary, no shell
+        result = subprocess.run(  # noqa: S603 # nosec B603 — fixed argv, absolute binary, no shell
             [git, "-C", str(root), "status", "--porcelain"],
             capture_output=True,
             text=True,
