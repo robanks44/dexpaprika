@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S6 complete — next: S7 hedge coverage engine (school-reconciled); S5.5 still blocked on addresses
+- Current section: S7 — hedge coverage engine — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -320,3 +320,23 @@
 - Test-change justifications: feat commit 626dce5 — AERO expectation corrected (raw
   at 18 decimals is dust; original test misread probe raw as whole tokens)
 - Completed: 2026-08-02
+
+### S7 — Hedge coverage engine — `in_progress`
+- Attempts: 1
+- Branch: `section/s7-hedge-engine` | Merge commit: — | Tag: —
+- Reference docs read (SCHOOL RECONCILIATION): personal\insurance-policy--strategy.md
+  — ADOPTED VERBATIM: quadrant model (Q3 profit zone, Q4 decision point), break-even-
+  at-floor sizing (NOT total LP value), coverage% = notional/exposure, SL near Q1/Q2
+  boundary rule (live SL $1925 = 63% -> flagged), premium/re-arm economics (engine
+  exposes premium_if_sl_fires; ledger in S8+). encylopedia Uig\5.action items.pdf
+  checked: Quest-5 FA checklist — strategy context, not hedge mechanics (noted per
+  gate rule). concentrated-liquidity-math summary re-used (S5).
+- Probe evidence (Step 2b): N/A — computes from recorded verified states; fixtures =
+  live S5 LP + S4 short states
+- Design notes / decisions: read-only engine; correlated top-exit/SL flag (VERIFIED
+  §6); recommendations never clamp silently — flag when target exceeds S9 limits
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
