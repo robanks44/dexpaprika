@@ -86,6 +86,28 @@
       "note": "Weight-based rate window: 1200 WEIGHT/min per IP, not 1200 calls."
     },
     {
+      "name": "base-rpc",
+      "base_url": "https://base-rpc.publicnode.com",
+      "rate_limit": 120,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "Public RPC ring for Base; conservative shared budget across the rotation."
+    },
+    {
+      "name": "arbitrum-rpc",
+      "base_url": "https://arb1.arbitrum.io/rpc",
+      "rate_limit": 120,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "Public RPC ring for Arbitrum; every call sends the dexpaprika UA (arb1 403s default)."
+    },
+    {
       "name": "geckoterminal",
       "base_url": "https://api.geckoterminal.com/api/v2",
       "rate_limit": 30,

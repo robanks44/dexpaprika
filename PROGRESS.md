@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S4 complete — next: S4.5 EVM on-chain read layer
+- Current section: S4.5 complete — next: S5 LP discovery & valuation
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s4-complete | main tip at last update: the s4 merge commit (see `git log`)
+- Last completed tag: s4.5-complete | main tip at last update: the s4.5 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -242,3 +242,28 @@
   precision (28 digits) — uint256 raws carry ~78 digits and were silently losing
   tail digits. Fixed with a context-free tuple exponent shift; the exactness tests
   caught it before it shipped. Any future scaler must use the same pattern.
+
+### S4.5 — EVM on-chain read layer — `complete`
+- Attempts: 1
+- Branch: `section/s4-5-evm-reader` | Merge commit: — | Tag: —
+- Reference docs read: web3py--api-reference.md (patterns adopted; dependency NOT — ADR
+  in spec); rpc-providers--api-reference--base-arbitrum.md (ring/UA/multicall adopted);
+  VERIFIED_FINDINGS §4; §0/§0.1 re-read
+- Probe evidence (Step 2b): probes/out/s45/pinned_multicall.json — hand-built aggregate
+  calldata live on both chains. STANDARDS CORRECTION FOUND BY PROBE: Multicall3
+  getBlockNumber returns the L1 block on Arbitrum (block.number is L1-approximated);
+  the §2 tripwire would always fail there. Per-chain tripwire verified instead:
+  Base=Multicall3.getBlockNumber, Arbitrum=ArbSys.arbBlockNumber (0xa3b1b31d) — exact
+  pin match live. FLAG FOR RICHARD (standards deviation, ENGINEERING_STANDARDS §2).
+- Design notes / decisions: raw JSON-RPC + vendored ABI over web3py dep (spec ADR);
+  base-rpc/arbitrum-rpc quota providers added; ring order from reference matrix
+- Test summary (written before code): 19 tests — encoding pinned byte-for-byte to
+  live calldata, tripwire/lag/chainId paths, Arbitrum-ArbSys proof test, failover,
+  CLI e2e; +3 rpc error-path tests post-impl (rpc.py -> 100%)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 1425857, make test
+  PASS (203 passed; "Required test coverage of 80% reached. Total coverage: 95.26%"),
+  make audit PASS; live smoke PASS on BOTH chains: base 49424223 tripwire ok,
+  arbitrum 490183762 (L2 block — ArbSys tripwire proven in use) tripwire ok
+- Coverage: 95.26% total; abi 98%, rpc 100% | ruff/mypy/bandit/pip-audit clean
+- Test-change justifications: none (additions only)
+- Completed: 2026-08-02

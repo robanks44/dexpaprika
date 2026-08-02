@@ -119,6 +119,21 @@ dexpaprika gmx positions [--address 0x...] [--record] --json
   `trigger_price`, `is_full_close` instead of a fake size number.
 - Peers rotate automatically; "all GMX peers failed" names both with reasons.
 
+## On-chain snapshots (S4.5)
+
+```
+dexpaprika chain snapshot [--chain base|arbitrum|all] --json
+```
+
+- One pinned Multicall3 batch per chain, recorded in `snapshots` with the
+  block number. Tripwires verify the node answered at the pinned block AND
+  the right chain; a "lagging load-balanced node" error means the snapshot
+  was discarded — just rerun.
+- Arbitrum note: block numbers are the LARGE L2 numbers (~490M). If a
+  future change shows ~25M there, the L1-block bug has crept back in.
+- RPC endpoint rings are config (`DEXPAPRIKA_*_RPC_URLS`); a dying free
+  endpoint is a config edit, not a code change.
+
 ## Gates (build sessions)
 
 ```
