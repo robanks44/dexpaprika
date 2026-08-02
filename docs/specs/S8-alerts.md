@@ -36,8 +36,8 @@ fixture). That receipt is the mock fixture for the gate suite.
 - Secret `ntfy_topic` (env backend: `DEXPAPRIKA_NTFY_TOPIC`). NEVER logged,
   never in alerts_log, never in error text — client redacts the topic from any
   exception/URL it surfaces (tested).
-- Config additions (`Settings`): `ntfy_base_url` (default `https://ntfy.sh`,
-  HTTPS-only rule applies), `alert_cooldown_minutes` (default 60),
+- Config: existing `ntfy_server` (default `https://ntfy.sh`, HTTPS-only).
+  Additions (`Settings`): `alert_cooldown_minutes` (default 60),
   `snapshot_staleness_minutes` (default 90 — hourly recorder + slack),
   `quota_alert_used_pct` (default `Decimal("0.80")`).
 
@@ -63,7 +63,7 @@ fixture). That receipt is the mock fixture for the gate suite.
 | `near-band-edge` | analysis flag (≤2% from either bound) | high |
 | `rebalance-needed` | analysis rebalance_needed (band `hedge_rebalance_band`) | high |
 | `snapshot-stale` | newest snapshot older than `snapshot_staleness_minutes` | high |
-| `quota-critical` | any provider ≥ `quota_alert_used_pct` of a window/credit budget | high |
+| `quota-critical` | a provider's MONTHLY credit budget ≥ `quota_alert_used_pct` used (rate windows fill transiently by design — never alerted) | high |
 | `healthcheck-degraded` | offline healthcheck (db/migrations/secrets) fails | high |
 
 Hedge rules source their inputs from the SAME path as `hedge status`
