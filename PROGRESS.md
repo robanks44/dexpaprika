@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S4.5 complete — next: S5 LP discovery & valuation
+- Current section: S5 — LP discovery & valuation — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -267,3 +267,22 @@
 - Coverage: 95.26% total; abi 98%, rpc 100% | ruff/mypy/bandit/pip-audit clean
 - Test-change justifications: none (additions only)
 - Completed: 2026-08-02
+
+### S5 — LP discovery & valuation — `in_progress`
+- Attempts: 1
+- Branch: `section/s5-lp-discovery` | Merge commit: — | Tag: —
+- Reference docs read: concentrated-liquidity-math--summary.md (formulas implemented
+  verbatim); aerodrome-slipstream gauges guide (Voter recipe + depositor caveat);
+  aerodrome quick-ref (Voter addr); §0.1(a)/(d) re-read
+- Probe evidence (Step 2b): probes/out/s5/discovery.json — FULL recipe live at pin
+  49424350: Sickle verified, tokenId 5056427 found via sickle on second NFPM,
+  factory().getPool() resolved the known pool (no hardcoding), gauge path exercised
+  (empty as expected), CL math independently reproduced position value (~$16.7k;
+  5.027638 WETH + 7423.73 USDC @ $1845.72)
+- Design notes / decisions: pool resolution generalized via factory(); sickle
+  owner-mismatch exclusion; unresolved pool -> flagged, never mis-valued
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
