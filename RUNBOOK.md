@@ -134,6 +134,20 @@ dexpaprika chain snapshot [--chain base|arbitrum|all] --json
 - RPC endpoint rings are config (`DEXPAPRIKA_*_RPC_URLS`); a dying free
   endpoint is a config edit, not a code change.
 
+## LP positions (S5)
+
+```
+dexpaprika lp snapshot [--address 0x...] [--record] --json
+```
+
+- Custody-aware: finds wallet-held, Sickle-held (vfat.io), and gauge-staked
+  positions; every position row carries `custody` + `custodian`.
+- All reads at ONE pinned block (`block_number` in the output). Amounts are
+  exact Decimals; `in_range` + `pool_tick` drive range alerts (S7/S8).
+- `pool_unresolved` or a decimals warning means the position was recorded
+  but NOT valued — extend the registry rather than trusting a guess.
+- A sickle whose `owner()` isn't the wallet is EXCLUDED (warning says so).
+
 ## Gates (build sessions)
 
 ```

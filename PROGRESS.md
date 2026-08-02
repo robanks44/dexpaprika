@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S4.5 complete — next: S5 LP discovery & valuation
+- Current section: S5 complete — next: S5.5 BTC & Solana clients (BLOCKED on addresses) or S6 portfolio
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s4.5-complete | main tip at last update: the s4.5 merge commit (see `git log`)
+- Last completed tag: s5-complete | main tip at last update: the s5 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -266,4 +266,33 @@
   arbitrum 490183762 (L2 block — ArbSys tripwire proven in use) tripwire ok
 - Coverage: 95.26% total; abi 98%, rpc 100% | ruff/mypy/bandit/pip-audit clean
 - Test-change justifications: none (additions only)
+- Completed: 2026-08-02
+
+### S5 — LP discovery & valuation — `complete`
+- Attempts: 1
+- Branch: `section/s5-lp-discovery` | Merge commit: — | Tag: —
+- Reference docs read: concentrated-liquidity-math--summary.md (formulas implemented
+  verbatim); aerodrome-slipstream gauges guide (Voter recipe + depositor caveat);
+  aerodrome quick-ref (Voter addr); §0.1(a)/(d) re-read
+- Probe evidence (Step 2b): probes/out/s5/discovery.json — FULL recipe live at pin
+  49424350: Sickle verified, tokenId 5056427 found via sickle on second NFPM,
+  factory().getPool() resolved the known pool (no hardcoding), gauge path exercised
+  (empty as expected), CL math independently reproduced position value (~$16.7k;
+  5.027638 WETH + 7423.73 USDC @ $1845.72)
+- Design notes / decisions: pool resolution generalized via factory(); sickle
+  owner-mismatch exclusion; unresolved pool -> flagged, never mis-valued
+- Test summary (written before code): 17 tests — CL math anchored to live-verified
+  constants + hypothesis invariants (monotonic delta, non-negative, boundary
+  continuity), discovery replay of live raws, custody rules, recording, CLI;
+  +3 edge-path tests post-impl (gauge dedup, pool-unresolved, unknown decimals)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 3198e21, make test
+  PASS (224 passed; "Required test coverage of 80% reached. Total coverage: 95.15%"),
+  make audit PASS; LIVE SMOKE: real position discovered + recorded end-to-end
+  (4.89 WETH + 7677.85 USDC @ $1851.08, in range, custody sickle)
+- Coverage: 95.15% total; clmath 100%, discovery 93% | ruff/mypy/bandit/pip-audit clean
+- Test-change justifications: feat commit 3198e21 — below-range max corrected to
+  formula-derived 9.23 WETH (the 9.01 in VERIFIED_FINDINGS §6 was a pre-ticks
+  ESTIMATE; the suite now pins the live-verified band prices 1689.24/2063.22 that
+  anchor the exact ticks). FLAG: VERIFIED_FINDINGS §6 delta figures (9.01 max) should
+  be read as superseded by the formula-derived values.
 - Completed: 2026-08-02

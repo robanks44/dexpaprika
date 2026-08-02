@@ -53,6 +53,13 @@ class Settings(BaseSettings):
         "https://arbitrum.gmxapi.io/v1",
         "https://arbitrum.gmxapi.ai/v1",
     ]
+    # SlipStream NFPM registry (>=2 deployments exist on Base — never hardcode one)
+    base_nfpm_addresses: CommaList = [
+        "0x827922686190790b37229fd06084350E74485b72",
+        "0xa990c6a764b73bf43cee5bb40339c3322fb9d55f",
+    ]
+    # Pools checked on the CLGauge staked path (gauge custody).
+    base_tracked_pools: CommaList = ["0x56aeaf4af2df4bdfd9d865830fefdd278b25e7ef"]
     dexpaprika_base_url: str = "https://api.dexpaprika.com"
     ntfy_server: str = "https://ntfy.sh"
 
