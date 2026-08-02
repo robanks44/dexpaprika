@@ -512,3 +512,29 @@
 - Coverage: 94.92% total; clients/btc.py 100% | all static clean
 - Completed: 2026-08-02
 - Deferred: Solana client — new section when Richard provides the address
+
+### S9 — Hedge order execution (PRIVILEGED) — `in-progress`
+- Attempts: 1
+- Branch: `section/s9-execution` | Merge commit: — | Tag: —
+- GO-AHEAD RECORDED: Richard, "start s9", 2026-08-02. Decisions: subaccount +
+  official-SDK sidecar custody (research-backed; community Python SDK rejected
+  — no SL/edit/cancel/subaccount); approve-every-order via ntfy; limits
+  $20k/$5k/4-per-day/ETH-USD-only; supervised SL-nudge as the live exercise
+- Reference docs read: ENGINEERING_STANDARDS §4 (full); gmx-python-sdk
+  reference (evaluated, rejected for writes); official GMX SDK v2 docs
+  (executeExpressOrder/prepareEditOrder/prepareCancelOrder/submitOrder with
+  native idempotencyKey, subaccount lifecycle, express relay); ntfy reference
+  (poll-based approval loop); OWASP Agentic Top 10 2026 (review logged in spec)
+- Probe evidence (Step 2b): probes/out/s9/sdk_fetch_orders.json — pinned
+  @gmx-io/sdk@1.6.4 live read-only from the sidecar: returned the REAL SL
+  order 0xc7c1...e642 (orderType 6, short, trigger 1925e12 — 1e12 scaling
+  re-confirmed, uint256max full-close sentinel). SDK ESM build broken
+  (extensionless imports) — sidecar uses the CJS entry, probe-verified
+- Design notes / decisions: Python owns every safeguard, Node sidecar is a
+  dumb prepare/submit tool (stdin JSON in, stdout JSON out, key env only in
+  submit mode); gate chain kill-switch -> armed -> hard limits -> approval;
+  audit intent->simulation->submission->confirmation with blocked/rejected;
+  idempotency = sha256(action|params|hour-bucket) + stored-response replay;
+  post-condition verify, auto-trip kill switch; OWASP ASI02/03/08/09/10
+  mitigations mapped in spec
+- Spec: docs/specs/S9-execution.md
