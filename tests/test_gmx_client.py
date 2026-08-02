@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import httpx
@@ -93,12 +93,16 @@ class TestScaling:
     @given(raw=st.integers(min_value=0, max_value=10**40))
     def test_usd_scaling_never_loses_precision(self, raw: int) -> None:
         scaled = scale_usd(str(raw))
-        assert scaled * Decimal(10) ** 30 == Decimal(raw)
+        with localcontext() as ctx:  # verification arithmetic must not round either
+            ctx.prec = 100
+            assert scaled * Decimal(10) ** 30 == Decimal(raw)
 
     @given(raw=st.integers(min_value=0, max_value=10**30), decimals=st.sampled_from([6, 8, 18]))
     def test_token_scaling_round_trips(self, raw: int, decimals: int) -> None:
         scaled = scale_tokens(str(raw), decimals)
-        assert scaled * Decimal(10) ** decimals == Decimal(raw)
+        with localcontext() as ctx:
+            ctx.prec = 100
+            assert scaled * Decimal(10) ** decimals == Decimal(raw)
 
 
 class TestParsing:
@@ -111,7 +115,7 @@ class TestParsing:
         assert p.is_long is False
         assert p.size_usd == Decimal("13155.762269646219571243906932")
         assert p.size_tokens == Decimal("7.038573460810147061")
-        assert p.entry_price == Decimal("1869.094972567349999993975016")
+        assert p.entry_price == Decimal("1869.094972567349999993975015634280")
         assert p.liquidation_price is not None
         assert p.leverage == Decimal("1.9694")
         # entryPrice ≡ sizeInUsd / sizeInTokens (verified invariant).
@@ -141,8 +145,13 @@ class TestParsing:
             .replace('"orderType":6', '"orderType":99')
             .replace('"orderType": 6', '"orderType": 99')
         )
-        handler = httpx.MockTransport(lambda _r: httpx.Response(200, text=raw))
-        client = make_client(conn, [handler])
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/positions"):
+                return httpx.Response(200, text=raw)
+            return httpx.Response(200, text=(FIXTURES / "markets.json").read_text())
+
+        client = make_client(conn, [httpx.MockTransport(handle)])
         order = client.get_positions(WALLET)[0].related_orders[0]
         assert order.order_kind == "unknown-99"
 

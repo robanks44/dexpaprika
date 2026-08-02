@@ -50,7 +50,10 @@ def test_gmx_positions_explicit_address(capsys: pytest.CaptureFixture[str], mock
     p = positions[0]
     assert isinstance(p, dict)
     assert p["index_name"] == "ETH/USD"
-    assert p["size_usd"] == "13155.762269646219571243906932"  # Decimal → str, exact
+    from decimal import Decimal
+
+    # Exactness is the contract; string form may carry trailing zeros.
+    assert Decimal(str(p["size_usd"])) == Decimal("13155.762269646219571243906932")
 
 
 def test_gmx_positions_default_address_from_registry(
