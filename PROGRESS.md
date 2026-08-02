@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S4 — GMX data client — `in_progress` (started 2026-08-02)
+- Current section: S4 complete — next: S4.5 EVM on-chain read layer
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s3-complete | main tip at last update: the s3 merge commit (see `git log`)
+- Last completed tag: s4-complete | main tip at last update: the s4 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -216,7 +216,7 @@
 - Test-change justifications: commit ba00b3b (coverage addition only)
 - Completed: 2026-08-02
 
-### S4 — GMX data client — `in_progress`
+### S4 — GMX data client — `complete`
 - Attempts: 1
 - Branch: `section/s4-gmx-client` | Merge commit: — | Tag: —
 - Reference docs read: VERIFIED_FINDINGS §2/§2.1/§2.2; REFERENCE_INDEX §1; dex-docs
@@ -228,8 +228,17 @@
 - Design notes / decisions: numerics parsed as Decimal from JSON strings; unknown
   orderType parsed defensively as unknown-<n>; peer failover at client layer over
   per-peer transports
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Test summary (written before code): 23 tests — exact-Decimal scaling table pinned
+  to live numbers + hypothesis precision round-trips, parsing/failover/recording, CLI
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 479466f, make test
+  PASS (184 passed; "Required test coverage of 80% reached. Total coverage: 94.92%"),
+  make audit PASS; live smoke PASS: real position recorded, SL trigger Decimal-equal
+  1925, is_full_close true
+- Coverage: 94.92% total; gmx client 93% | ruff/mypy/bandit/pip-audit clean
+- Test-change justifications: commit 479466f — original expectations computed WITH
+  the context-rounding bug the impl fixes; checks made stricter, none weakened
+- Completed: 2026-08-02
+- IMPLEMENTATION CATCH worth remembering: Decimal '/' AND scaleb() round at context
+  precision (28 digits) — uint256 raws carry ~78 digits and were silently losing
+  tail digits. Fixed with a context-free tuple exponent shift; the exactness tests
+  caught it before it shipped. Any future scaler must use the same pattern.
