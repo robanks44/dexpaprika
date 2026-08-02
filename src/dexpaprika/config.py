@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     dexpaprika_base_url: str = "https://api.dexpaprika.com"
     ntfy_server: str = "https://ntfy.sh"
 
+    # Rebalance band (fraction of max delta) before a hedge adjustment is flagged.
+    hedge_rebalance_band: Decimal = Decimal("0.075")
+
     # --- S9 hard limits (Decimal money; zero/empty = execution disabled) ---
     max_position_usd: Decimal = Decimal("0")
     max_delta_per_run_usd: Decimal = Decimal("0")

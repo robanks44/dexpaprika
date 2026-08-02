@@ -331,6 +331,97 @@ def _derive_lifecycle_since(conn: Any, max_event_id_before: int) -> None:
         observe(conn, row["position_id"], row["ts"])
 
 
+def _latest_hedge_inputs(conn: Any) -> tuple[Any, Any, Any] | None:
+    """(LpParams, ShortParams|None, price) from the latest recorded states."""
+    import json as _json
+    from decimal import Decimal
+
+    from dexpaprika.hedge.engine import LpParams, ShortParams
+
+    lp_row = conn.execute(
+        "SELECT e.state_json FROM positions p"
+        " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
+        " WHERE p.kind='lp' AND p.closed_at IS NULL"
+        " ORDER BY e.id DESC LIMIT 1"
+    ).fetchone()
+    if lp_row is None:
+        return None
+    lp_state = _json.loads(lp_row["state_json"])
+    if lp_state.get("price_usd") is None:
+        return None
+    lp = LpParams(
+        tick_lower=lp_state["tick_lower"],
+        tick_upper=lp_state["tick_upper"],
+        liquidity=lp_state["liquidity"],
+    )
+    price = Decimal(str(lp_state["price_usd"]))
+
+    short = None
+    perp_row = conn.execute(
+        "SELECT e.state_json FROM positions p"
+        " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
+        " WHERE p.kind='perp' AND p.closed_at IS NULL"
+        " ORDER BY e.id DESC LIMIT 1"
+    ).fetchone()
+    if perp_row is not None:
+        perp = _json.loads(perp_row["state_json"])
+        triggers = perp.get("stop_loss_triggers") or []
+        short = ShortParams(
+            size_eth=Decimal(str(perp["size_tokens"])),
+            entry_price=Decimal(str(perp["entry_price"])),
+            sl_trigger=Decimal(str(triggers[0])) if triggers else None,
+            collateral_usd=(
+                Decimal(str(perp["collateral_usd"])) if perp.get("collateral_usd") else None
+            ),
+        )
+    return lp, short, price
+
+
+def _cmd_hedge(args: argparse.Namespace, *, as_json: bool) -> int:
+    from decimal import Decimal
+
+    from dexpaprika.hedge.engine import analyze, simulate
+    from dexpaprika.lp.clmath import price_from_tick
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` and `snapshot` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        inputs = _latest_hedge_inputs(conn)
+        if inputs is None:
+            _emit(
+                {"error": "no recorded LP state — run `dexpaprika snapshot --kind lp` first"},
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+        lp, short, recorded_price = inputs
+        if args.hedge_command == "status":
+            analysis = analyze(lp, short, recorded_price, settings=settings)
+            payload: dict[str, Any] = {"analysis": analysis.model_dump(mode="json")}
+        else:  # simulate
+            if args.price is not None:
+                prices = [Decimal(args.price)]
+            else:
+                floor = price_from_tick(lp.tick_lower)
+                ceiling = price_from_tick(lp.tick_upper)
+                n = max(args.curve, 2)
+                step = (ceiling - floor) / (n - 1)
+                prices = [floor + step * i for i in range(n)]
+            entry = short.entry_price if short is not None else recorded_price
+            points = simulate(lp, short, prices, entry_price=entry)
+            payload = {"points": [p.model_dump(mode="json") for p in points]}
+    finally:
+        conn.close()
+    _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
     from datetime import UTC, datetime
 
@@ -856,6 +947,17 @@ def build_parser() -> argparse.ArgumentParser:
     report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
     _add_json_flag(report)
 
+    hedge = subparsers.add_parser(
+        "hedge", help="Hedge coverage analysis (read-only; school-material rules)."
+    )
+    hedge_sub = hedge.add_subparsers(dest="hedge_command", required=True)
+    h_status = hedge_sub.add_parser("status", help="Coverage/quadrant/flags from latest states.")
+    _add_json_flag(h_status)
+    h_sim = hedge_sub.add_parser("simulate", help="What-if P&L (dual-curve) at prices.")
+    h_sim.add_argument("--price", default=None, help="Single price to evaluate.")
+    h_sim.add_argument("--curve", type=int, default=9, help="N points floor→ceiling.")
+    _add_json_flag(h_sim)
+
     return parser
 
 
@@ -882,6 +984,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_snapshot(args, as_json=args.as_json)
     if args.command == "report":
         return _cmd_report(as_json=args.as_json)
+    if args.command == "hedge":
+        return _cmd_hedge(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

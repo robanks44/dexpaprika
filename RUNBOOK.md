@@ -164,6 +164,24 @@ dexpaprika report --json
   closed) — this is the alertable state S8 watches.
 - Holdings show amounts only (pricing joins in S7/S8).
 
+## Hedge analysis (S7 — read-only)
+
+```
+dexpaprika hedge status --json                     # from latest snapshots
+dexpaprika hedge simulate [--price P | --curve N] --json
+```
+
+- Requires `snapshot --kind lp` (+ `hedge`) first. Missing short = `naked-lp`
+  flag — THE alertable state after an SL stop-out.
+- Fields follow the Insurance Policy strategy: quadrant (Q3 = profit zone,
+  Q4 boundary = decision point), `break_even_short_size` (S*),
+  `delta_matched_target_eth`, `rebalance_needed` (band 7.5% of max delta),
+  `premium_if_sl_fires` (stop-out cost).
+- Standing flags on the current book: `over-hedged` (fixed 7.04 short vs
+  moving delta), `sl-correlated-with-top-exit`, `sl-below-q1q2-rule`
+  (SL $1925 at ~63% vs the 75% rule) — strategy decisions, not bugs.
+- `simulate --curve 9` renders the dual-curve P&L floor→ceiling.
+
 ## Gates (build sessions)
 
 ```
