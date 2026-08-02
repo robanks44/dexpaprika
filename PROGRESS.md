@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S1 complete — next: S2 storage & migrations
+- Current section: S2 — storage & migrations — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -138,3 +138,19 @@
   updated for S1's two implemented checks; unreachable float assert removed;
   error-path tests added for core-coverage gate)
 - Completed: 2026-08-02
+
+### S2 — Storage & migrations — `in_progress`
+- Attempts: 1
+- Branch: `section/s2-storage-migrations` | Merge commit: — | Tag: —
+- Reference docs read: sqlite--best-practices.md (WAL/PRAGMAs/backup API/money storage/
+  indexing — adopted); timescaledb--api-reference--lp-tracker.md (hypertable partition
+  column requirement → ts column on every time-series table; portable DDL);
+  REFERENCE_INDEX §0/§0.1 re-read
+- Probe evidence (Step 2b): N/A — local SQLite only, no external source (spec §Probe)
+- Design notes / decisions: forward-only migrations (ADR in spec); wallet registry stays
+  JSON (S1 ADR upheld); Decimal-as-TEXT over BLOB (auditable, Postgres NUMERIC-castable)
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
