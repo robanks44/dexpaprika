@@ -1,0 +1,14 @@
+# Local container parity (ENGINEERING_STANDARDS §6). The scheduler stays
+# external — this service just proves the artifact runs containerized:
+#   docker compose run --rm app healthcheck --json
+services:
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - dexpaprika-data:/data
+
+volumes:
+  dexpaprika-data:
