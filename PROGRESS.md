@@ -472,6 +472,12 @@
 - Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
 - Completed: 2026-08-02
 
+### Remote — GitHub configured (2026-08-02)
+- origin: https://github.com/robanks44/dexpaprika (private); main + all 14
+  section tags pushed and verified via ls-remote; credentials live OUTSIDE the
+  repo (session credential store); fine-grained PAT scoped to this repo only,
+  contents read/write. Future section closeouts push main + tags per GIT_RULES.
+
 ### S5.5 — BTC holdings client (BTC-only) — `complete`
 - Attempts: 1
 - Branch: `section/s55-btc` | Merge commit: — | Tag: —
