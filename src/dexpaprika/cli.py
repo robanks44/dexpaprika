@@ -254,6 +254,31 @@ def _cmd_db(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_quota(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        tracker = QuotaTracker(conn)
+        tracker.ensure_providers()
+        providers = [tracker.summary(args.provider)] if args.provider else tracker.summaries()
+    except QuotaError as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit({"providers": providers}, as_json=as_json)
+    return EXIT_OK
+
+
 # ------------------------------- parser -------------------------------
 
 
@@ -316,6 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
     db_restore.add_argument("--from", dest="source", default=None, metavar="PATH")
     _add_json_flag(db_restore)
 
+    quota = subparsers.add_parser(
+        "quota", help="Provider quota: spend vs budget from the call log."
+    )
+    quota.add_argument("--provider", default=None, help="Limit to one provider.")
+    _add_json_flag(quota)
+
     return parser
 
 
@@ -328,6 +359,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_healthcheck(as_json=args.as_json)
     if args.command == "db":
         return _cmd_db(args, as_json=args.as_json)
+    if args.command == "quota":
+        return _cmd_quota(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

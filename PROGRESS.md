@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S2 complete — next: S2.5 provider quota tracker
+- Current section: S2.5 complete — next: S3 DexPaprika client
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s2-complete | main tip at last update: the s2 merge commit (see `git log`)
+- Last completed tag: s2.5-complete | main tip at last update: the s2.5 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -164,3 +164,31 @@
 - Completed: 2026-08-02
 - Fix during implementation worth remembering: SQL header comments contained ';' —
   the statement splitter now strips `--` comments BEFORE splitting (test caught it)
+
+### S2.5 — Provider quota tracker — `complete`
+- Attempts: 1
+- Branch: `section/s2-5-quota-tracker` | Merge commit: — | Tag: —
+- Reference docs read: REFERENCE_INDEX §3b (design implemented as specified);
+  coinstats--api-reference.md (400cr/DeFi call, budget guard, 80% alert);
+  krystal--api-reference--client.md (pacing/weights); §0/§0.1 re-read
+- Probe evidence (Step 2b): N/A — local accounting only; seed values from
+  session-verified docs, re-probed per client at S3+
+- Design notes / decisions: sliding window computed from api_call_log (DB-backed ⇒
+  per-upstream enforcement across instances, §3b); credit budgets per UTC calendar
+  month; longest-fnmatch-pattern wins for endpoint weights; 80% alerting deferred to
+  S8 rules (tracker reports pct_used)
+- Test summary (written before code): 20 tests incl. hypothesis property (any guarded
+  call pattern keeps every window under limit), frozen-clock windows, month reset,
+  per-upstream two-instance enforcement, CLI e2e
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of a6a089b, make test
+  PASS (137 passed; "Required test coverage of 80% reached. Total coverage: 94.78%"),
+  make audit PASS, quota CLI functionally verified (9 seeded providers, hyperliquid
+  credits-mode window, unknown-provider error)
+- Coverage: 94.78% total; tracker 98% | ruff: clean | mypy --strict: clean | bandit:
+  clean | pip-audit: clean (local skip)
+- Test-change justifications: none
+- Completed: 2026-08-02
+- Design addition vs §3b (logged): per-provider window MODE (calls|credits via
+  config_json) — Hyperliquid's 1200/min is WEIGHT, not calls; a call-count window
+  would under-throttle it, and a credits-window would break CoinStats. Both now
+  first-class.
