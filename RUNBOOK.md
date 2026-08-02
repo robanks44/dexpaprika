@@ -273,6 +273,45 @@ the table below.
 | alerts exit 3, `ntfy_status` recorded | delivery failed but the firing IS recorded | fix connectivity/topic, next cooldown-expired check re-delivers; nothing is lost |
 | clock skew fail | Windows clock drifted | resync time; until then staleness ages, cooldowns, and quota windows are unreliable |
 
+## Execution (S9 — PRIVILEGED; separate command scope)
+
+```
+dexpaprika execute status --json                     # armed? kill switch? limits?
+dexpaprika execute set-sl-trigger --price 1926 --json          # DRY-RUN (default)
+dexpaprika execute arm [--ttl-minutes 30] --json     # step 1 of going live
+dexpaprika execute set-sl-trigger --price 1926 --arm --json    # live (gated)
+dexpaprika execute resize-short --target-eth 5.10 --json
+dexpaprika execute cancel-order --key 0xORDERKEY --json
+```
+
+- **Dry-run is the default everywhere**: without `--arm` the command builds
+  and simulates the full plan, records intent+simulation in the audit log,
+  and sends NOTHING. Going live requires BOTH `execute arm` (creates the
+  expiring armed-state file) AND the `--arm` flag on the order command.
+- **Every live order needs Richard's approval**: an urgent ntfy message
+  restates the action, sizes, and plan; reply `approve <id>` (or
+  `reject <id>`) on the topic within 10 min. Timeout = rejected. A bare
+  "yes" can never fire anything — approval binds to the instruction id.
+- **Hard limits enforced in code before any network call**: max position
+  $20k, max delta per run $5k, max 4 adjustments/day, ETH/USD only, min
+  60s between submissions (all env-tunable; audit-counted).
+- **Kill switch**: create the file `KILL-SWITCH` in the data dir to halt
+  ALL mutating behaviour instantly. The system trips it itself on 3
+  consecutive failed submissions or any post-condition mismatch. NO code
+  path removes it — deleting the file manually is the only re-arm.
+- **Audit trail**: append-only `audit_log` — intent → simulation →
+  submission → confirmation, plus blocked/rejected rows with reasons.
+  Idempotency: the same decision in the same hour replays the stored
+  response; a crash between submit and confirm re-uses the SAME venue-side
+  idempotency key, so double-fire is impossible.
+- **Key custody**: the executor holds only the GMX subaccount key (secret
+  `gmx_subaccount_key`) — scoped on-chain (action count + expiry), can
+  trade the GMX account, can NEVER withdraw funds. Until the supervised
+  setup session creates and authorizes it, live submission fails closed.
+- Sidecar: `executor/gmx_exec.cjs` (official `@gmx-io/sdk`, pinned
+  lockfile; `cd executor && npm ci`). Needs Node.js; the sidecar holds no
+  policy — every safeguard lives in the Python gate chain.
+
 ## Deployment (S11 — container/VPS)
 
 ```

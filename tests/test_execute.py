@@ -322,7 +322,7 @@ class TestIdempotency:
 
     def test_confirmed_decision_replays_without_sidecar(self, conn: sqlite3.Connection) -> None:
         arm(settings(), ttl_minutes=60, now=NOW)
-        first, side_a = run(conn, arm_flag=True)
+        first, _side_a = run(conn, arm_flag=True)
         assert first.status == "confirmed"
         later = NOW + timedelta(minutes=5)
         second, side_b = run(conn, arm_flag=True, now=later)

@@ -538,3 +538,18 @@
   post-condition verify, auto-trip kill switch; OWASP ASI02/03/08/09/10
   mitigations mapped in spec
 - Spec: docs/specs/S9-execution.md
+- Test summary (written before code): 40 tests — every safeguard BLOCKS
+  (dry-run default: submit call impossible; --arm without armed file; armed
+  file expiry; kill switch blocks before any sidecar contact, arm refuses
+  while tripped, no code path removes the file, auto-trip on 3 consecutive
+  failures + on post-condition mismatch; each hard limit: position/delta/
+  market/daily-count/rate; approval rejection + timeout fail-closed +
+  substantive message; idempotency hour-bucket + stored-response replay +
+  crash-restart same-key resubmit; audit completeness property: no
+  submission without prior intent), approval loop unit tests, instruction
+  validation, ntfy poll (NDJSON, topic hygiene incl. endpoint label +
+  error redaction), CLI scope tests
+- Build-run evidence: LIVE dry-run e2e in-sandbox — `execute set-sl-trigger
+  --price 1926` (no --arm): real SL order key auto-resolved via sidecar
+  read, real prepareEditOrder request built (request_id from GMX API),
+  trigger 1926e30 in plan, NOTHING submitted, exit 0

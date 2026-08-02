@@ -98,9 +98,24 @@ class HttpTransport:
 
     # ------------------------------ request ------------------------------
 
-    def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    def get_json(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        endpoint_label: str | None = None,
+    ) -> Any:
         """GET ``path`` and return its JSON with all numbers as int/Decimal."""
-        return self._request("GET", path, params=params)
+        return self._request("GET", path, params=params, label=endpoint_label)
+
+    def get_ndjson(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        endpoint_label: str | None = None,
+    ) -> list[Any]:
+        """GET newline-delimited JSON (e.g. ntfy poll) — one parsed value per line."""
+        payload = self._request("GET", path, params=params, label=endpoint_label, ndjson=True)
+        return payload if isinstance(payload, list) else [payload]
 
     def post_json(
         self,
@@ -118,6 +133,7 @@ class HttpTransport:
         params: dict[str, Any] | None = None,
         json_payload: dict[str, Any] | None = None,
         label: str | None = None,
+        ndjson: bool = False,
     ) -> Any:
         endpoint = label or path
         self._breaker_gate()
@@ -157,7 +173,7 @@ class HttpTransport:
                     " check the identifier/parameters (no retry)"
                 )
                 raise TransportError(msg)
-            return self._parse(response, endpoint)
+            return self._parse(response, endpoint, ndjson=ndjson)
         self._on_exhausted()
         msg = (
             f"{self._provider} {endpoint} failed after {self._max_attempts} attempts: {last_error}"
@@ -172,7 +188,7 @@ class HttpTransport:
         jitter = random.uniform(0, base / 4)  # noqa: S311 # nosec B311
         self._sleeper(base + jitter)
 
-    def _parse(self, response: httpx.Response, path: str) -> Any:
+    def _parse(self, response: httpx.Response, path: str, *, ndjson: bool = False) -> Any:
         if len(response.content) > MAX_RESPONSE_BYTES:
             msg = (
                 f"response from {self._provider} {path} too large"
@@ -181,7 +197,14 @@ class HttpTransport:
             self._on_success()  # upstream is alive; the payload is just absurd
             raise TransportError(msg)
         try:
-            payload = json.loads(response.text, parse_float=Decimal)
+            if ndjson:
+                payload: Any = [
+                    json.loads(line, parse_float=Decimal)
+                    for line in response.text.splitlines()
+                    if line.strip()
+                ]
+            else:
+                payload = json.loads(response.text, parse_float=Decimal)
         except json.JSONDecodeError as exc:
             msg = f"{self._provider} {path} returned invalid JSON: {exc}"
             raise TransportError(msg) from exc

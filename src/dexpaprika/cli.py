@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -1001,6 +1002,227 @@ def _cmd_scheduler(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _sidecar_runner(settings: Settings) -> Any:
+    """Production sidecar: the pinned Node executor as a one-shot subprocess.
+
+    The subaccount key env var is set ONLY for submit-mode payloads.
+    """
+    import shutil
+    import subprocess  # nosec B404 — fixed argv, repo-pinned script, no shell
+
+    def run_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        node = shutil.which("node")
+        if node is None:
+            return {"ok": False, "error": "node not found — the executor sidecar needs Node.js"}
+        script = Path(__file__).resolve().parents[2] / "executor" / "gmx_exec.cjs"
+        if not script.exists():
+            return {"ok": False, "error": f"sidecar script missing at {script}"}
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")}
+        for passthrough in (
+            "HTTPS_PROXY",
+            "HTTP_PROXY",
+            "NO_PROXY",
+            "SSL_CERT_FILE",
+            "NODE_EXTRA_CA_CERTS",
+        ):
+            if os.environ.get(passthrough):
+                env[passthrough] = os.environ[passthrough]
+        if payload.get("mode") == "submit":
+            key = resolve_provider(settings).get("gmx_subaccount_key")
+            if key is None:
+                return {
+                    "ok": False,
+                    "error": (
+                        "secret 'gmx_subaccount_key' not resolvable — the supervised"
+                        " subaccount setup has not happened yet"
+                    ),
+                }
+            env["GMX_SUBACCOUNT_KEY"] = key
+        try:
+            proc = subprocess.run(  # noqa: S603 # nosec B603 — fixed argv, no shell
+                [node, str(script)],
+                input=json.dumps(payload, default=str),
+                capture_output=True,
+                text=True,
+                timeout=180,
+                check=False,
+                env=env,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {"ok": False, "error": f"sidecar failed to run: {exc}"}
+        if proc.returncode != 0:
+            return {"ok": False, "error": f"sidecar exit {proc.returncode}: {proc.stderr[-500:]}"}
+        try:
+            result: dict[str, Any] = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            return {"ok": False, "error": f"sidecar returned invalid JSON: {exc}"}
+        return result
+
+    return run_payload
+
+
+def _cmd_execute(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from dexpaprika.execute.approval import ApprovalDecision, request_approval
+    from dexpaprika.execute.engine import execute_instruction
+    from dexpaprika.execute.instruction import OrderInstruction
+    from dexpaprika.execute.safety import arm as do_arm
+    from dexpaprika.execute.safety import check_armed, check_kill_switch
+
+    settings = Settings.load()
+    now = datetime.now(UTC)
+
+    if args.execute_command == "arm":
+        try:
+            armed_path = do_arm(settings, ttl_minutes=args.ttl_minutes, now=now)
+        except RuntimeError as exc:
+            _emit({"error": str(exc)}, as_json=as_json)
+            return EXIT_FAILURE
+        _emit(
+            {"armed": True, "path": str(armed_path), "ttl_minutes": args.ttl_minutes},
+            as_json=as_json,
+        )
+        return EXIT_OK
+
+    if args.execute_command == "status":
+        kill = check_kill_switch(settings)
+        armed = check_armed(settings, arm_flag=True, now=now)
+        _emit(
+            {
+                "armed": armed.allowed,
+                "armed_detail": armed.reason,
+                "kill_switch": not kill.allowed,
+                "kill_detail": kill.reason,
+                "limits": {
+                    "max_position_usd": str(settings.max_position_usd),
+                    "max_delta_per_run_usd": str(settings.max_delta_per_run_usd),
+                    "max_daily_adjustments": settings.max_daily_adjustments,
+                    "allowed_markets": list(settings.allowed_markets),
+                    "order_rate_limit_seconds": settings.order_rate_limit_seconds,
+                },
+            },
+            as_json=as_json,
+        )
+        return EXIT_OK
+
+    # Mutating commands: database required (audit trail is not optional).
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first (audit trail)"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    sidecar = _sidecar_runner(settings)
+
+    conn = connect(path)
+    try:
+        if args.execute_command == "set-sl-trigger":
+            order_key = args.key
+            if order_key is None:
+                read = sidecar({"mode": "read", "action": "read-orders", "params": {}})
+                orders = read.get("orders", []) if read.get("ok") else []
+                if not orders:
+                    _emit(
+                        {"error": "no open order found to retarget — pass --key explicitly"},
+                        as_json=as_json,
+                    )
+                    return EXIT_FAILURE
+                order_key = str(orders[0]["key"])
+            instruction = OrderInstruction(
+                action="set-sl-trigger",
+                order_key=order_key,
+                trigger_price=Decimal(args.price),
+            )
+            delta_usd = Decimal(0)
+            new_position = _current_short_usd(conn)
+        elif args.execute_command == "resize-short":
+            from dexpaprika.hedge.state import latest_inputs
+
+            inputs = latest_inputs(conn)
+            if inputs is None:
+                _emit(
+                    {"error": "no recorded hedge state — run `dexpaprika snapshot` first"},
+                    as_json=as_json,
+                )
+                return EXIT_FAILURE
+            _lp, short, price = inputs
+            current_eth = short.size_eth if short is not None else Decimal(0)
+            target = Decimal(args.target_eth)
+            instruction = OrderInstruction(action="resize-short", target_eth=target)
+            delta_usd = abs(target - current_eth) * price
+            new_position = target * price
+        else:  # cancel-order
+            instruction = OrderInstruction(action="cancel-order", order_key=args.key)
+            delta_usd = Decimal(0)
+            new_position = _current_short_usd(conn)
+
+        def approval(instruction_id: str, message: str) -> ApprovalDecision:
+            topic = resolve_provider(settings).get("ntfy_topic")
+            if topic is None:
+                return ApprovalDecision(
+                    approved=False,
+                    reason="no ntfy topic configured — cannot request approval; fail-closed",
+                )
+            from dexpaprika.alerts.ntfy import NtfyClient
+
+            client = NtfyClient(
+                conn,
+                settings=settings,
+                client=_http_client_factory(settings.ntfy_server),
+                topic=topic,
+            )
+            import time as _time
+
+            return request_approval(
+                instruction_id,
+                message,
+                publisher=lambda title, body, priority: client.publish(
+                    title, body, priority=priority, tags=["rotating_light"]
+                ),
+                poller=client.poll,
+                clock=lambda: datetime.now(UTC),
+                sleeper=_time.sleep,
+                timeout_minutes=settings.approval_timeout_minutes,
+            )
+
+        result = execute_instruction(
+            conn,
+            instruction,
+            settings=settings,
+            sidecar=sidecar,
+            approval=approval,
+            arm_flag=args.arm,
+            now=now,
+            delta_usd=delta_usd,
+            new_position_usd=new_position,
+        )
+    finally:
+        conn.close()
+    _emit(result.model_dump(mode="json"), as_json=as_json)
+    if result.status in ("dry-run", "confirmed", "replayed"):
+        return EXIT_OK
+    if result.status == "failed":
+        return EXIT_FAILURE
+    return EXIT_DEGRADED  # blocked / rejected
+
+
+def _current_short_usd(conn: Any) -> Any:
+    from decimal import Decimal
+
+    row = conn.execute(
+        "SELECT e.state_json FROM positions p"
+        " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
+        " WHERE p.kind='perp' AND p.closed_at IS NULL ORDER BY e.id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return Decimal(0)
+    state = json.loads(row["state_json"])
+    return Decimal(str(state["size_usd"])) if state.get("size_usd") else Decimal(0)
+
+
 def _offline_health(settings: Settings) -> dict[str, str]:
     """The healthcheck subset that needs no network — alert-rule input."""
     return {
@@ -1299,6 +1521,30 @@ def build_parser() -> argparse.ArgumentParser:
     s_run = scheduler_sub.add_parser("run", help="Run the persistent scheduler (blocks).")
     _add_json_flag(s_run)
 
+    execute = subparsers.add_parser(
+        "execute",
+        help="PRIVILEGED hedge orders (dry-run default; --arm + armed state to go live).",
+    )
+    execute_sub = execute.add_subparsers(dest="execute_command", required=True)
+    e_arm = execute_sub.add_parser("arm", help="Create the armed-state file (separate step).")
+    e_arm.add_argument("--ttl-minutes", type=int, default=None)
+    _add_json_flag(e_arm)
+    e_status = execute_sub.add_parser("status", help="Armed / kill-switch / limits overview.")
+    _add_json_flag(e_status)
+    e_sl = execute_sub.add_parser("set-sl-trigger", help="Retarget the stop-loss trigger.")
+    e_sl.add_argument("--price", required=True, help="New trigger price in USD.")
+    e_sl.add_argument("--key", default=None, help="Order key (default: the open SL order).")
+    e_sl.add_argument("--arm", action="store_true", help="Live mode (needs armed state).")
+    _add_json_flag(e_sl)
+    e_resize = execute_sub.add_parser("resize-short", help="Resize the hedge to a target ETH.")
+    e_resize.add_argument("--target-eth", required=True)
+    e_resize.add_argument("--arm", action="store_true")
+    _add_json_flag(e_resize)
+    e_cancel = execute_sub.add_parser("cancel-order", help="Cancel an open order by key.")
+    e_cancel.add_argument("--key", required=True)
+    e_cancel.add_argument("--arm", action="store_true")
+    _add_json_flag(e_cancel)
+
     return parser
 
 
@@ -1331,6 +1577,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_alerts(args, as_json=args.as_json)
     if args.command == "scheduler":
         return _cmd_scheduler(args, as_json=args.as_json)
+    if args.command == "execute":
+        return _cmd_execute(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

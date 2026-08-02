@@ -92,11 +92,16 @@ class Settings(BaseSettings):
     # Alerts-monitor cadence; snapshot stays hourly-on-the-hour, backup daily.
     scheduler_alerts_minutes: int = 5
 
-    # --- S9 hard limits (Decimal money; zero/empty = execution disabled) ---
-    max_position_usd: Decimal = Decimal("0")
-    max_delta_per_run_usd: Decimal = Decimal("0")
-    max_daily_adjustments: int = 0
-    allowed_markets: CommaList = []
+    # --- S9 hard limits (Richard, 2026-08-02; zero/empty = that limit disabled) ---
+    max_position_usd: Decimal = Decimal("20000")
+    max_delta_per_run_usd: Decimal = Decimal("5000")
+    max_daily_adjustments: int = 4
+    allowed_markets: CommaList = ["ETH/USD"]
+    # Execution plumbing (S9): two-step arming with expiry, an order-submission
+    # rate limit independent of the venue's, and the approval-poll timeout.
+    arm_ttl_minutes: int = 30
+    order_rate_limit_seconds: int = 60
+    approval_timeout_minutes: int = 10
 
     @field_validator(*_LIST_FIELDS, mode="before")
     @classmethod
