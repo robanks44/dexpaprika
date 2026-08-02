@@ -178,6 +178,12 @@ dexpaprika report --json
   per chain. Safe to re-run — observations append, nothing duplicates.
 - `report` is the agent's portfolio read: three groups (lp_hedge / defi /
   holdings) with as_of + source per entry, lp_value + defi_net totals.
+- Holdings cover EVM (Base native + tokens) AND native BTC (S5.5): register
+  a BTC wallet with `--chain btc` and `snapshot --kind holdings` reads its
+  balance via Esplora (blockstream primary, mempool.space fallback; peers
+  configurable via `DEXPAPRIKA_BTC_ESPLORA_PEERS`). The BTC snapshot row
+  carries `chain='bitcoin'` with no block (timestamped off-chain source).
+  Esplora failures surface as nonzero snapshot exits + the staleness alert.
 - A GMX `full_close` event appearing = the short is GONE (SL fired or
   closed) — this is the alertable state S8 watches.
 - Holdings show amounts only (pricing joins in S7/S8).

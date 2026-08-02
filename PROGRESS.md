@@ -490,3 +490,9 @@
   pipeline; snapshots row chain='bitcoin' block NULL (off-chain source per
   §2); healthcheck reachability unchanged (documented)
 - Spec: docs/specs/S5.5-btc.md
+- Test summary (written before code): 8 tests — probe-exact Decimal
+  (131,828 sats -> "0.00131828"), funded-spent+mempool-delta math, peer
+  failover (blockstream 5xx -> mempool serves, both dead -> detailed error),
+  idempotent holdings upsert with two observations, CLI e2e (EVM+BTC
+  holdings snapshot -> report shows BTC row; btc-only registry works;
+  excluded BTC wallet skipped)
