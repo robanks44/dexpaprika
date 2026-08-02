@@ -182,6 +182,55 @@ dexpaprika hedge simulate [--price P | --curve N] --json
   (SL $1925 at ~63% vs the 75% rule) — strategy decisions, not bugs.
 - `simulate --curve 9` renders the dual-curve P&L floor→ceiling.
 
+## Alerts & reporting (S8)
+
+```
+dexpaprika alerts check [--dry-run] --json   # evaluate → record → deliver
+dexpaprika alerts test --json                # one live test notification
+dexpaprika alerts log [--limit N] --json     # firing history (audit)
+```
+
+- Channel: ntfy topic (secret `ntfy_topic` — keyring service `dexpaprika`
+  or `DEXPAPRIKA_SECRET_NTFY_TOPIC`). The topic never appears in URLs,
+  logs, errors, or `alerts_log` (JSON publish to `/`, endpoint label
+  `publish`).
+- Rules: `naked-lp` + `price-near-sl` (urgent); `near-band-edge`,
+  `rebalance-needed`, `snapshot-stale` (>90 min), `quota-critical`
+  (monthly credit budget ≥80%), `healthcheck-degraded` (high).
+- Every firing lands in `alerts_log` BEFORE delivery — a dead channel
+  exits 3 (degraded) with `delivered=0` + `ntfy_status`, never a lost
+  record. Same rule re-fires only after the 60-min cooldown
+  (`DEXPAPRIKA_ALERT_COOLDOWN_MINUTES`).
+- An alert firing is the system WORKING: `alerts check` exits 0 when all
+  deliveries succeed, 3 when delivery is degraded, 1 on failure — so Task
+  Scheduler history doubles as a health log.
+
+### Scheduled tasks (Windows Task Scheduler drives the CLI)
+
+```bat
+schtasks /Create /TN "dexpaprika\recorder" /SC HOURLY ^
+  /TR "C:\path\venv\Scripts\dexpaprika.exe snapshot --json" /F
+schtasks /Create /TN "dexpaprika\alerts" /SC MINUTE /MO 5 ^
+  /TR "C:\path\venv\Scripts\dexpaprika.exe alerts check --json" /F
+```
+
+Hardening (taskschd.msc → task properties — per the scheduling playbook):
+"Run whether user is logged on or not"; UNTICK AC-power conditions;
+"Run task as soon as possible after a scheduled start is missed";
+"If already running: Do not start a new instance"; "Stop the task if it
+runs longer than" 30 min. Laptop sleep = missed runs — the CLI is
+idempotent and gap-tolerant (actual timestamps recorded; `snapshot-stale`
+alerts when the pipeline gaps). Query health:
+`schtasks /Query /TN dexpaprika\alerts /V /FO LIST`.
+
+### Reports for a fresh Claude session (read order)
+
+1. `dexpaprika healthcheck --json` — is the system trustworthy right now?
+2. `dexpaprika report --json` — portfolio by group with as_of.
+3. `dexpaprika hedge status --json` — coverage/quadrant/flags.
+4. `dexpaprika alerts log --json` — what fired lately and was it delivered.
+5. `dexpaprika quota --json` — remaining API headroom.
+
 ## Gates (build sessions)
 
 ```

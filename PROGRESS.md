@@ -360,9 +360,20 @@
   no-new-instance, hang guard; nonzero exit = scheduler history as health log)
 - Probe evidence (Step 2b): pending — one live low-priority publish, receipt
   dumped to probes/out/s8/publish_receipt.json (topic redacted)
+- Probe evidence (Step 2b): probes/out/s8/publish_receipt.json — live publish to
+  the real topic HTTP 200, receipt shape pinned (id/time/expires/event/priority/
+  tags; topic redacted in fixture); receipt is the gate-suite mock
 - Design notes / decisions: rules engine over recorded state only (7 rules:
   naked-lp, price-near-sl, near-band-edge, rebalance-needed, snapshot-stale,
-  quota-critical, healthcheck-degraded); record-before-deliver so failures are
-  never lost; cooldown dedup via alerts_log; topic never logged/surfaced;
-  reports for fresh Claude = existing --json surfaces, documented in RUNBOOK
+  quota-critical [monthly credit budgets only — rate windows fill transiently],
+  healthcheck-degraded); JSON publish to `/` with endpoint label `publish` so the
+  topic never reaches URLs/api_call_log/errors; record-before-deliver so failures
+  are never lost (exit 3 degraded); cooldown dedup via alerts_log counts
+  undelivered rows too (no retry storms); `_latest_hedge_inputs` moved to
+  hedge/state.py (shared by hedge status + alerts); ntfy provider seeded 30/min
+- Test summary (written before code): 31 tests — each rule fires on violation /
+  silent when healthy, cooldown suppression + expiry, record-then-mark-delivery,
+  priority name→level mapping, action-button forwarding, topic hygiene (error
+  text, api_call_log, repr, CLI output, alerts_log), CLI e2e on live fixtures
+  (fire→deliver→log, 500→degraded-recorded, dry-run inert, no-topic degraded)
 - Spec: docs/specs/S8-alerts.md
