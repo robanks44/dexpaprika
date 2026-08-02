@@ -1,0 +1,81 @@
+[project]
+name = "dexpaprika"
+version = "0.0.1"
+description = "Claude-operated DeFi system: portfolio analysis, data recording, GMX short-hedge management protecting LP downside."
+readme = "README.md"
+requires-python = "==3.13.*"
+license = { text = "Proprietary" }
+# Runtime dependencies are added per-section (S1+). S0 ships a stdlib-only CLI stub
+# so no premature dependency decisions enter the lockfile.
+dependencies = []
+
+[project.scripts]
+dexpaprika = "dexpaprika.cli:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+    "mypy>=1.17",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-socket>=0.7",
+    "hypothesis>=6.130",
+    "bandit>=1.8",
+    "pip-audit>=2.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dexpaprika"]
+
+# ---------------- static gates (ENGINEERING_STANDARDS §1) ----------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "B",           # bugbear
+    "UP",          # pyupgrade
+    "S",           # bandit-style security
+    "C4",          # comprehensions
+    "DTZ",         # naive-datetime bans (clock discipline)
+    "T20",         # no stray print (CLI writes via emit helpers)
+    "RET", "SIM",
+    "PTH",         # pathlib over os.path
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is the point of tests
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+# No `# type: ignore` without an inline justification comment (standards §1) —
+# enforced by review; mypy flags unused ignores:
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+addopts = "--disable-socket --strict-markers -q --cov=dexpaprika --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["tests"]
+markers = [
+    "live: read-only live smoke tests (network; EXCLUDED from the gate suite)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["dexpaprika"]
+
+[tool.bandit]
+targets = ["src"]
