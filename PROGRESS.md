@@ -349,3 +349,43 @@
 - Test-change justifications: feat commit ef9ced1 (precision-artifact assertion fixes
   only; contract unchanged)
 - Completed: 2026-08-02
+
+### S8 — Reporting & alerts (ntfy) — `complete`
+- Attempts: 1
+- Branch: `section/s8-alerts` | Merge commit: — | Tag: —
+- Reference docs read: ntfy--api-reference.md (POST to topic; Title/Priority/Tags;
+  topic = secret by knowledge-of-name; best-effort delivery, rate limits ->
+  cooldown per state-change); python-scheduling--playbook--windows.md (Task
+  Scheduler drives CLI: hourly snapshot + 5-min alerts check; catch-up,
+  no-new-instance, hang guard; nonzero exit = scheduler history as health log)
+- Probe evidence (Step 2b): pending — one live low-priority publish, receipt
+  dumped to probes/out/s8/publish_receipt.json (topic redacted)
+- Probe evidence (Step 2b): probes/out/s8/publish_receipt.json — live publish to
+  the real topic HTTP 200, receipt shape pinned (id/time/expires/event/priority/
+  tags; topic redacted in fixture); receipt is the gate-suite mock
+- Design notes / decisions: rules engine over recorded state only (7 rules:
+  naked-lp, price-near-sl, near-band-edge, rebalance-needed, snapshot-stale,
+  quota-critical [monthly credit budgets only — rate windows fill transiently],
+  healthcheck-degraded); JSON publish to `/` with endpoint label `publish` so the
+  topic never reaches URLs/api_call_log/errors; record-before-deliver so failures
+  are never lost (exit 3 degraded); cooldown dedup via alerts_log counts
+  undelivered rows too (no retry storms); `_latest_hedge_inputs` moved to
+  hedge/state.py (shared by hedge status + alerts); ntfy provider seeded 30/min
+- Test summary (written before code): 31 tests — each rule fires on violation /
+  silent when healthy, cooldown suppression + expiry, record-then-mark-delivery,
+  priority name→level mapping, action-button forwarding, topic hygiene (error
+  text, api_call_log, repr, CLI output, alerts_log), CLI e2e on live fixtures
+  (fire→deliver→log, 500→degraded-recorded, dry-run inert, no-topic degraded)
+- Spec: docs/specs/S8-alerts.md
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 95c2e80, make test
+  PASS (295 passed; "Required test coverage of 80% reached. Total coverage: 94.98%"),
+  make audit PASS; adversarial review: no defects (cooldown boundary, UTC ts ordering,
+  record-durability via autocommit, topic hygiene incl. raw grep of live data dir all
+  verified); LIVE SMOKE: real snapshot then alerts check --dry-run fired exactly
+  rebalance-needed (short 7.0386 vs target 4.7640 ETH, Q3, $1,856.27); alerts test
+  landed a REAL notification on the topic (receipt by8NSR8zr6C1); `git grep` for the
+  topic string empty repo-wide
+- Coverage: 94.98% total; rules 99%, ntfy 95%, hedge/state 93% | all static clean
+- Test-change justifications: post-tests-first edits were lint/type-only (unused
+  unpack -> _out; dict -> Mapping params); assertions and contract unchanged
+- Completed: 2026-08-02

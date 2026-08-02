@@ -1,0 +1,16 @@
+{
+  "http_status": 200,
+  "receipt": {
+    "id": "jTE4IF9ptc1V",
+    "time": 1785641346,
+    "expires": 1785684546,
+    "event": "message",
+    "topic": "REDACTED",
+    "title": "dexpaprika probe",
+    "message": "dexpaprika S8 probe \u2014 alert channel verification (min priority)",
+    "priority": 1,
+    "tags": [
+      "white_check_mark"
+    ]
+  }
+}

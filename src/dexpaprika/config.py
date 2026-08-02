@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # Rebalance band (fraction of max delta) before a hedge adjustment is flagged.
     hedge_rebalance_band: Decimal = Decimal("0.075")
 
+    # --- alerts (S8) ---
+    # Same rule fired within this window is suppressed (ntfy free-tier etiquette:
+    # alert per state-change, never per poll tick).
+    alert_cooldown_minutes: int = 60
+    # Hourly recorder + slack; older newest-snapshot means the pipeline is down.
+    snapshot_staleness_minutes: int = 90
+    # Monthly credit budgets only — rate windows fill transiently by design.
+    quota_alert_used_pct: Decimal = Decimal("0.80")
+
     # --- S9 hard limits (Decimal money; zero/empty = execution disabled) ---
     max_position_usd: Decimal = Decimal("0")
     max_delta_per_run_usd: Decimal = Decimal("0")
