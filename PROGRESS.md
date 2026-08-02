@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S3 complete — next: S4 GMX data client
+- Current section: S4 — GMX data client — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -215,3 +215,21 @@
 - Coverage: 95.34% total; transport 100%, client 100% | ruff/mypy/bandit/pip-audit clean
 - Test-change justifications: commit ba00b3b (coverage addition only)
 - Completed: 2026-08-02
+
+### S4 — GMX data client — `in_progress`
+- Attempts: 1
+- Branch: `section/s4-gmx-client` | Merge commit: — | Tag: —
+- Reference docs read: VERIFIED_FINDINGS §2/§2.1/§2.2; REFERENCE_INDEX §1; dex-docs
+  QUICK-REFERENCE GMX section
+- Probe evidence (Step 2b): probes/out/s4/ — both peers live+identical; all scalings
+  re-verified exactly (trigger/1e12=1925.0, sizeDeltaUsd=uint256max full close);
+  PROBE CATCH: /markets has NO indexName — filter positions by indexName, resolve
+  index decimals via marketAddress→indexTokenAddress→registry
+- Design notes / decisions: numerics parsed as Decimal from JSON strings; unknown
+  orderType parsed defensively as unknown-<n>; peer failover at client layer over
+  per-peer transports
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
