@@ -32,3 +32,14 @@ gate: test audit
 # nothing. The live leg of the LOOP_PROMPT Step 8 whole-system check.
 smoke:
 	uv run pytest tests/live -m live --force-enable-socket --no-cov -q
+
+# CycloneDX SBOM for the FROZEN runtime dependency set (ENGINEERING_STANDARDS §3).
+sbom:
+	mkdir -p dist
+	uv export --frozen --no-dev --no-emit-project -o dist/requirements-frozen.txt
+	uv run cyclonedx-py requirements dist/requirements-frozen.txt -o dist/sbom.cdx.json
+	rm -f dist/requirements-frozen.txt
+
+# Release artifact = wheel + sdist + SBOM, all under dist/.
+release: sbom
+	uv build

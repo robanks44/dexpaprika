@@ -1,12 +1,28 @@
-# Local container parity (ENGINEERING_STANDARDS §6). The scheduler stays
-# external — this service just proves the artifact runs containerized:
-#   docker compose run --rm app healthcheck --json
+# dexpaprika — compose parity (ENGINEERING_STANDARDS §6).
+# One artifact, scheduler-driven CLI (S11). Secrets come from the HOST
+# environment (the §3 provider swap: keyring on Windows → env backend in
+# containers); values are never written into this file or the image.
+#
+#   DEXPAPRIKA_SECRET_NTFY_TOPIC=... docker compose up -d
+#   docker compose run --rm scheduler healthcheck --json   # one-off ops
+#
+# The rehearsal database (Timescale path) is NOT part of the runtime stack;
+# see RUNBOOK "Deployment" for scripts/pg_rehearsal.py.
+
 services:
-  app:
+  scheduler:
     build: .
-    env_file:
-      - path: .env
-        required: false
+    image: dexpaprika:latest
+    command: ["scheduler", "run"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      DEXPAPRIKA_DATA_DIR: /data
+      DEXPAPRIKA_SECRET_BACKEND: env
+      DEXPAPRIKA_SECRET_NTFY_TOPIC: ${DEXPAPRIKA_SECRET_NTFY_TOPIC:?set in host env, never here}
+      DEXPAPRIKA_LOG_LEVEL: ${DEXPAPRIKA_LOG_LEVEL:-INFO}
     volumes:
       - dexpaprika-data:/data
 

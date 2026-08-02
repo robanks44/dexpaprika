@@ -8,6 +8,7 @@ license = { text = "Proprietary" }
 # Runtime dependencies are added per-section (S1+). S0 ships a stdlib-only CLI stub
 # so no premature dependency decisions enter the lockfile.
 dependencies = [
+    "apscheduler>=3.11,<4",
     "httpx>=0.28.1",
     "keyring>=25.7.0",
     "pydantic>=2.13.4",
@@ -27,6 +28,12 @@ dev = [
     "hypothesis>=6.130",
     "bandit>=1.8",
     "pip-audit>=2.9",
+    "pyyaml>=6.0.3",
+    "types-pyyaml>=6.0.12.20260724",
+    "cyclonedx-bom>=7.3.1",
+]
+pg = [
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
@@ -67,6 +74,12 @@ python_version = "3.13"
 strict = true
 files = ["src", "tests"]
 warn_unreachable = true
+
+# APScheduler 3.x ships no py.typed (4.x will) — untyped import allowed with
+# our own annotations at the boundary (scheduler.py).
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
 # No `# type: ignore` without an inline justification comment (standards §1) —
 # enforced by review; mypy flags unused ignores:
 warn_unused_ignores = true

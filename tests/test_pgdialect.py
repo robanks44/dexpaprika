@@ -77,8 +77,9 @@ class TestHypertables:
             drop = f"ALTER TABLE {table} DROP COLUMN id"
             assert drop in ddl
             create = next(s for s in ddl if f"create_hypertable('{table}'" in s)
-            assert f"by_range('{column}')" in create
-            assert f"INTERVAL '{chunk}'" in create
+            # TimescaleDB 2.17 generalized API (rehearsal-verified): chunk
+            # interval rides INSIDE by_range().
+            assert f"by_range('{column}', INTERVAL '{chunk}')" in create
             # DROP must precede conversion (hypertables convert empty tables).
             assert ddl.index(drop) < ddl.index(create)
 
