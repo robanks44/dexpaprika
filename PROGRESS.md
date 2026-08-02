@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S7 — hedge coverage engine — `in_progress` (started 2026-08-02)
+- Current section: S7 complete — next: S8 reporting & alerts (ntfy)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s6-complete | main tip at last update: the s6 merge commit (see `git log`)
+- Last completed tag: s7-complete | main tip at last update: the s7 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -321,7 +321,7 @@
   at 18 decimals is dust; original test misread probe raw as whole tokens)
 - Completed: 2026-08-02
 
-### S7 — Hedge coverage engine — `in_progress`
+### S7 — Hedge coverage engine — `complete`
 - Attempts: 1
 - Branch: `section/s7-hedge-engine` | Merge commit: — | Tag: —
 - Reference docs read (SCHOOL RECONCILIATION): personal\insurance-policy--strategy.md
@@ -335,8 +335,17 @@
   live S5 LP + S4 short states
 - Design notes / decisions: read-only engine; correlated top-exit/SL flag (VERIFIED
   §6); recommendations never clamp silently — flag when target exceeds S9 limits
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Test summary (written before code): 19 tests — school rules on live fixture
+  (quadrants, coverage 1.40 over-hedged, break-even invariant |net|<$0.01 at floor,
+  SL rules, premium), dual-curve simulate properties, limits flag, hypothesis
+  coverage-non-negative
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of ef9ced1, make test
+  PASS (264 passed; "Required test coverage of 80% reached. Total coverage: 95.11%"),
+  make audit PASS; LIVE: hedge status on fresh market data — quadrant Q3, coverage
+  1.476, flags exactly [over-hedged, sl-correlated-with-top-exit, sl-below-q1q2-rule],
+  S* = 6.778 ETH, premium-if-SL -$393.49; simulate at floor: net +$46.80 (over-hedge
+  cushion visible)
+- Coverage: 95.11% total; engine 98% | ruff/mypy/bandit/pip-audit clean
+- Test-change justifications: feat commit ef9ced1 (precision-artifact assertion fixes
+  only; contract unchanged)
+- Completed: 2026-08-02
