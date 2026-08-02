@@ -390,7 +390,7 @@
   unpack -> _out; dict -> Mapping params); assertions and contract unchanged
 - Completed: 2026-08-02
 
-### S10 — Whole-system integration & runbook — `in-progress`
+### S10 — Whole-system integration & runbook — `complete`
 - Attempts: 1
 - Branch: `section/s10-integration` | Merge commit: — | Tag: —
 - Reference docs read: ENGINEERING_STANDARDS §2 healthcheck list (re-read: DB
