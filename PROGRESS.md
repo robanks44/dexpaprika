@@ -112,8 +112,15 @@
 ### S1 — Config, secrets & wallet registry — `in_progress`
 - Attempts: 1
 - Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
-- Reference docs read: — (Step 2 pending)
-- Probe evidence (Step 2b): — (pending assessment)
+- Reference docs read: python-keyring--setup--windows.md (service naming, env-fallback
+  chain, Linux-VM silent-None behavior — all adopted); pytest--best-practices.md
+  (conftest config fixture isolating real keyring/env; frozen vectors); REFERENCE_INDEX
+  §0/§0.1 re-read; python--best-practices--project-structure.md (read at S0, applies).
+  Note: keyring doc's "never use .env" adopted for SECRETS; non-secret config may use
+  .env per ARCHITECTURE §4.
+- Probe evidence (Step 2b): N/A — S1 reads no external API/on-chain source. Address
+  validation pinned by published vectors (EIP-55, BIP-173/350, genesis addr, Solana
+  program ids) + Richard's live wallet address. Rationale in docs/specs/S1.
 - Design notes / decisions: —
 - Test summary (written before code): —
 - Verifier verdict: —
