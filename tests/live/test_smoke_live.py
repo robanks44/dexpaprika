@@ -9,6 +9,7 @@ for the healthcheck secrets check — nothing is published.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,15 @@ pytestmark = pytest.mark.live
 
 WALLET = "0xC155A616e39D7B83E37e8FD9d2106E1BC056d7Fe"
 
+# conftest.py wipes DEXPAPRIKA_* per test (offline-gate determinism). The live
+# suite is the one place ambient secret config is WANTED — capture it at import
+# time (before fixtures run) and restore it per test.
+_AMBIENT_SECRETS = {
+    key: value
+    for key, value in os.environ.items()
+    if key == "DEXPAPRIKA_SECRET_BACKEND" or key.startswith("DEXPAPRIKA_SECRET_")
+}
+
 
 @pytest.fixture(scope="module")
 def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
@@ -28,6 +38,8 @@ def data_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture(autouse=True)
 def _env(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEXPAPRIKA_DATA_DIR", str(data_dir))
+    for key, value in _AMBIENT_SECRETS.items():
+        monkeypatch.setenv(key, value)
 
 
 def run_json(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, dict[str, object]]:
@@ -68,5 +80,6 @@ def test_04_healthcheck_all_pass(capsys: pytest.CaptureFixture[str]) -> None:
     code, health = run_json(capsys, "healthcheck")
     checks = health["checks"]
     assert isinstance(checks, dict)
-    assert code == EXIT_OK, checks
-    assert all(str(v).startswith("ok") for v in checks.values()), checks
+    failing = {k: v for k, v in checks.items() if not str(v).startswith("ok")}
+    assert code == EXIT_OK, json.dumps(failing, indent=2)
+    assert not failing, json.dumps(failing, indent=2)
