@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S2 — storage & migrations — `in_progress` (started 2026-08-02)
+- Current section: S2 complete — next: S2.5 provider quota tracker
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s1-complete | main tip at last update: the s1 merge commit (see `git log`)
+- Last completed tag: s2-complete | main tip at last update: the s2 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -139,7 +139,7 @@
   error-path tests added for core-coverage gate)
 - Completed: 2026-08-02
 
-### S2 — Storage & migrations — `in_progress`
+### S2 — Storage & migrations — `complete`
 - Attempts: 1
 - Branch: `section/s2-storage-migrations` | Merge commit: — | Tag: —
 - Reference docs read: sqlite--best-practices.md (WAL/PRAGMAs/backup API/money storage/
@@ -149,8 +149,18 @@
 - Probe evidence (Step 2b): N/A — local SQLite only, no external source (spec §Probe)
 - Design notes / decisions: forward-only migrations (ADR in spec); wallet registry stays
   JSON (S1 ADR upheld); Decimal-as-TEXT over BLOB (auditable, Postgres NUMERIC-castable)
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Test summary (written before code): 28 tests — PRAGMAs/WAL persistence, Decimal-TEXT
+  property round-trip, migrations idempotence + atomic rollback + schema sweeps
+  (money-not-REAL, ts columns), backup round-trip/corrupt-refusal/pre-restore/pruning,
+  CLI db e2e, healthcheck db checks; +3 error-path tests post-impl (justified commit)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of cba2471, uv sync
+  --frozen, make test PASS (117 passed; "Required test coverage of 80% reached. Total
+  coverage: 94.08%"), make audit PASS, functional db lifecycle verified end-to-end
+  (fresh migrate → idempotent re-run → verified backup → integrity ok), healthcheck
+  db_integrity + migrations_current both ok
+- Coverage: 94.08% total; storage core: db 100%, migrations 97%, backup 94% | ruff:
+  clean | mypy --strict: clean | bandit: clean | pip-audit: clean (local skip)
+- Test-change justifications: commit cba2471 (error-path additions only)
+- Completed: 2026-08-02
+- Fix during implementation worth remembering: SQL header comments contained ';' —
+  the statement splitter now strips `--` comments BEFORE splitting (test caught it)

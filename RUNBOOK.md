@@ -54,6 +54,27 @@ dexpaprika wallets include --label <name> --json   # resume tracking
 | healthcheck `data_dir_writable: fail` | bad path/permissions | check `DEXPAPRIKA_DATA_DIR`, create dir or fix perms |
 | keyring silently returns nothing on Linux | no keyring backend in VM | expected; use `DEXPAPRIKA_SECRET_*` env vars (auto backend falls through) |
 
+## Database (S2)
+
+```
+dexpaprika db status --json    # exists, pending migrations, integrity, size
+dexpaprika db migrate --json   # apply pending (idempotent; safe to re-run)
+dexpaprika db backup --json    # verified online backup -> <data_dir>/backups/ (keeps 7)
+dexpaprika db restore --json [--from <path>]   # verified restore; newest backup default
+```
+
+- DB file: `<data_dir>/dexpaprika.db` (WAL mode — `-wal`/`-shm` sidecars are normal).
+- Restore never destroys state: the old DB is kept as `dexpaprika.db.pre-restore`.
+- Migrations are forward-only; "rolling back" = `db restore` from a backup.
+
+| Symptom | Meaning | Recovery |
+|---|---|---|
+| healthcheck `db_integrity: fail ... missing` | DB not created yet | `dexpaprika db migrate` |
+| healthcheck `db_integrity: fail ... integrity_check` | corruption | `dexpaprika db restore` (newest backup), then `db status` |
+| healthcheck `migrations_current: fail` | new code, old schema | `dexpaprika db migrate` |
+| `db migrate` exit 1 "rolled back" | bad migration file | DB unchanged and usable; fix the SQL, rerun |
+| `db restore` exit 1 "refusing restore" | backup corrupt | pick an older backup with `--from` |
+
 ## Gates (build sessions)
 
 ```
