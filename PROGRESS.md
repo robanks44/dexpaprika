@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S4 complete — next: S4.5 EVM on-chain read layer
+- Current section: S4.5 — EVM on-chain read layer — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -242,3 +242,23 @@
   precision (28 digits) — uint256 raws carry ~78 digits and were silently losing
   tail digits. Fixed with a context-free tuple exponent shift; the exactness tests
   caught it before it shipped. Any future scaler must use the same pattern.
+
+### S4.5 — EVM on-chain read layer — `in_progress`
+- Attempts: 1
+- Branch: `section/s4-5-evm-reader` | Merge commit: — | Tag: —
+- Reference docs read: web3py--api-reference.md (patterns adopted; dependency NOT — ADR
+  in spec); rpc-providers--api-reference--base-arbitrum.md (ring/UA/multicall adopted);
+  VERIFIED_FINDINGS §4; §0/§0.1 re-read
+- Probe evidence (Step 2b): probes/out/s45/pinned_multicall.json — hand-built aggregate
+  calldata live on both chains. STANDARDS CORRECTION FOUND BY PROBE: Multicall3
+  getBlockNumber returns the L1 block on Arbitrum (block.number is L1-approximated);
+  the §2 tripwire would always fail there. Per-chain tripwire verified instead:
+  Base=Multicall3.getBlockNumber, Arbitrum=ArbSys.arbBlockNumber (0xa3b1b31d) — exact
+  pin match live. FLAG FOR RICHARD (standards deviation, ENGINEERING_STANDARDS §2).
+- Design notes / decisions: raw JSON-RPC + vendored ABI over web3py dep (spec ADR);
+  base-rpc/arbitrum-rpc quota providers added; ring order from reference matrix
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
