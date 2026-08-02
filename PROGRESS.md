@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S5 complete — next: S5.5 BTC & Solana clients (BLOCKED on addresses) or S6 portfolio
+- Current section: S6 — portfolio analysis & recording — `in_progress` (started 2026-08-02; S5.5 deferred, blocked on addresses)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -296,3 +296,21 @@
   anchor the exact ticks). FLAG: VERIFIED_FINDINGS §6 delta figures (9.01 max) should
   be read as superseded by the formula-derived values.
 - Completed: 2026-08-02
+
+### S6 — Portfolio analysis & recording — `in_progress`
+- Attempts: 1
+- Branch: `section/s6-portfolio` | Merge commit: — | Tag: —
+- Reference docs read: defi-portfolio best practices §2-3 (event lifecycle adopted);
+  aggregation playbook (with §0.1 weakening); tax-tracking (raw state retention);
+  aave-v3 guide (on-chain account read chosen over subgraphs)
+- Probe evidence (Step 2b): probes/out/s6/portfolio.json — Aave v3 Base Pool verified
+  live (collateral $12,432.32 / debt $4,673.04 / HF 2.2082, scalings 1e8+1e18+bps);
+  native + WETH/USDC/AERO balances at same pin
+- Design notes / decisions: lifecycle events derived from successive observed states
+  (open/modify/full_close), S3-S5 record functions untouched; holdings pricing joins
+  in S7/S8 (amounts only in S6)
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
