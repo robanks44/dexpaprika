@@ -349,3 +349,20 @@
 - Test-change justifications: feat commit ef9ced1 (precision-artifact assertion fixes
   only; contract unchanged)
 - Completed: 2026-08-02
+
+### S8 — Reporting & alerts (ntfy) — `in-progress`
+- Attempts: 1
+- Branch: `section/s8-alerts` | Merge commit: — | Tag: —
+- Reference docs read: ntfy--api-reference.md (POST to topic; Title/Priority/Tags;
+  topic = secret by knowledge-of-name; best-effort delivery, rate limits ->
+  cooldown per state-change); python-scheduling--playbook--windows.md (Task
+  Scheduler drives CLI: hourly snapshot + 5-min alerts check; catch-up,
+  no-new-instance, hang guard; nonzero exit = scheduler history as health log)
+- Probe evidence (Step 2b): pending — one live low-priority publish, receipt
+  dumped to probes/out/s8/publish_receipt.json (topic redacted)
+- Design notes / decisions: rules engine over recorded state only (7 rules:
+  naked-lp, price-near-sl, near-band-edge, rebalance-needed, snapshot-stale,
+  quota-critical, healthcheck-degraded); record-before-deliver so failures are
+  never lost; cooldown dedup via alerts_log; topic never logged/surfaced;
+  reports for fresh Claude = existing --json surfaces, documented in RUNBOOK
+- Spec: docs/specs/S8-alerts.md
