@@ -407,3 +407,16 @@
   integrity enforced INSIDE make test; live suite marked `live`, gate runs
   `-m "not live"`, `make smoke` runs it for real
 - Spec: docs/specs/S10-integration.md
+- Test summary (written before code): 17 integration tests — cold-start operator
+  lifecycle (migrate->wallets->snapshot->report->hedge->alerts->healthcheck all
+  green), healthcheck completeness (9 real checks, no not-implemented), failure
+  drills (dead RPC records nothing, stale recorder degrades health AND alerts,
+  monthly credit budget exhausted fails fast AND alerts, clock skew, backup->
+  corrupt->restore with data intact), repo_state unit tests on real tmp git
+  repos, doc integrity (every RUNBOOK command parses against build_parser, every
+  CLI command documented, every referenced repo path exists); 4-test live smoke
+  suite (marked live, gate deselects)
+- Test-change justifications: two S1-era healthcheck tests updated for the S10
+  contract (not-implemented no longer exists; network pair mocked in the DB-
+  focused test — drilled for real in test_integration.py); RUNBOOK placeholder
+  commands normalized to parseable examples (the new doc-integrity gate at work)
