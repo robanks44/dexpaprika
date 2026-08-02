@@ -7,7 +7,11 @@ requires-python = "==3.13.*"
 license = { text = "Proprietary" }
 # Runtime dependencies are added per-section (S1+). S0 ships a stdlib-only CLI stub
 # so no premature dependency decisions enter the lockfile.
-dependencies = []
+dependencies = [
+    "keyring>=25.7.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+]
 
 [project.scripts]
 dexpaprika = "dexpaprika.cli:main"
