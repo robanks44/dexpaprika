@@ -350,7 +350,7 @@
   only; contract unchanged)
 - Completed: 2026-08-02
 
-### S8 — Reporting & alerts (ntfy) — `in-progress`
+### S8 — Reporting & alerts (ntfy) — `complete`
 - Attempts: 1
 - Branch: `section/s8-alerts` | Merge commit: — | Tag: —
 - Reference docs read: ntfy--api-reference.md (POST to topic; Title/Priority/Tags;
@@ -377,3 +377,15 @@
   text, api_call_log, repr, CLI output, alerts_log), CLI e2e on live fixtures
   (fire→deliver→log, 500→degraded-recorded, dry-run inert, no-topic degraded)
 - Spec: docs/specs/S8-alerts.md
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 95c2e80, make test
+  PASS (295 passed; "Required test coverage of 80% reached. Total coverage: 94.98%"),
+  make audit PASS; adversarial review: no defects (cooldown boundary, UTC ts ordering,
+  record-durability via autocommit, topic hygiene incl. raw grep of live data dir all
+  verified); LIVE SMOKE: real snapshot then alerts check --dry-run fired exactly
+  rebalance-needed (short 7.0386 vs target 4.7640 ETH, Q3, $1,856.27); alerts test
+  landed a REAL notification on the topic (receipt by8NSR8zr6C1); `git grep` for the
+  topic string empty repo-wide
+- Coverage: 94.98% total; rules 99%, ntfy 95%, hedge/state 93% | all static clean
+- Test-change justifications: post-tests-first edits were lint/type-only (unused
+  unpack -> _out; dict -> Mapping params); assertions and contract unchanged
+- Completed: 2026-08-02
