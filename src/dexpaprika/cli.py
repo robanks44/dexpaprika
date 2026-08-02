@@ -331,56 +331,11 @@ def _derive_lifecycle_since(conn: Any, max_event_id_before: int) -> None:
         observe(conn, row["position_id"], row["ts"])
 
 
-def _latest_hedge_inputs(conn: Any) -> tuple[Any, Any, Any] | None:
-    """(LpParams, ShortParams|None, price) from the latest recorded states."""
-    import json as _json
-    from decimal import Decimal
-
-    from dexpaprika.hedge.engine import LpParams, ShortParams
-
-    lp_row = conn.execute(
-        "SELECT e.state_json FROM positions p"
-        " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
-        " WHERE p.kind='lp' AND p.closed_at IS NULL"
-        " ORDER BY e.id DESC LIMIT 1"
-    ).fetchone()
-    if lp_row is None:
-        return None
-    lp_state = _json.loads(lp_row["state_json"])
-    if lp_state.get("price_usd") is None:
-        return None
-    lp = LpParams(
-        tick_lower=lp_state["tick_lower"],
-        tick_upper=lp_state["tick_upper"],
-        liquidity=lp_state["liquidity"],
-    )
-    price = Decimal(str(lp_state["price_usd"]))
-
-    short = None
-    perp_row = conn.execute(
-        "SELECT e.state_json FROM positions p"
-        " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
-        " WHERE p.kind='perp' AND p.closed_at IS NULL"
-        " ORDER BY e.id DESC LIMIT 1"
-    ).fetchone()
-    if perp_row is not None:
-        perp = _json.loads(perp_row["state_json"])
-        triggers = perp.get("stop_loss_triggers") or []
-        short = ShortParams(
-            size_eth=Decimal(str(perp["size_tokens"])),
-            entry_price=Decimal(str(perp["entry_price"])),
-            sl_trigger=Decimal(str(triggers[0])) if triggers else None,
-            collateral_usd=(
-                Decimal(str(perp["collateral_usd"])) if perp.get("collateral_usd") else None
-            ),
-        )
-    return lp, short, price
-
-
 def _cmd_hedge(args: argparse.Namespace, *, as_json: bool) -> int:
     from decimal import Decimal
 
     from dexpaprika.hedge.engine import analyze, simulate
+    from dexpaprika.hedge.state import latest_inputs
     from dexpaprika.lp.clmath import price_from_tick
 
     settings = Settings.load()
@@ -393,7 +348,7 @@ def _cmd_hedge(args: argparse.Namespace, *, as_json: bool) -> int:
         return EXIT_FAILURE
     conn = connect(path)
     try:
-        inputs = _latest_hedge_inputs(conn)
+        inputs = latest_inputs(conn)
         if inputs is None:
             _emit(
                 {"error": "no recorded LP state — run `dexpaprika snapshot --kind lp` first"},
@@ -823,6 +778,143 @@ def _cmd_quota(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _offline_health(settings: Settings) -> dict[str, str]:
+    """The healthcheck subset that needs no network — alert-rule input."""
+    return {
+        "db_integrity": _check_db_integrity(settings),
+        "migrations_current": _check_migrations_current(settings),
+        "secrets_present": _check_secrets_present(settings),
+        "data_dir_writable": _check_data_dir_writable(settings),
+    }
+
+
+def _cmd_alerts(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+
+    from dexpaprika.alerts.ntfy import NtfyClient
+    from dexpaprika.alerts.rules import (
+        apply_cooldown,
+        evaluate,
+        mark_delivery,
+        record_alert,
+    )
+    from dexpaprika.clients.base import TransportError
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        if pending(conn):
+            _emit(
+                {"error": "schema out of date — run `dexpaprika db migrate` first"},
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+        QuotaTracker(conn).ensure_providers()
+
+        if args.alerts_command == "log":
+            rows = conn.execute(
+                "SELECT id, ts, rule, severity, payload_json, delivered, ntfy_status"
+                " FROM alerts_log ORDER BY id DESC LIMIT ?",
+                (args.limit,),
+            ).fetchall()
+            _emit({"alerts": [dict(row) for row in rows]}, as_json=as_json)
+            return EXIT_OK
+
+        topic = resolve_provider(settings).get("ntfy_topic")
+
+        def make_client(topic_value: str) -> NtfyClient:
+            return NtfyClient(
+                conn,
+                settings=settings,
+                client=_http_client_factory(settings.ntfy_server),
+                topic=topic_value,
+            )
+
+        if args.alerts_command == "test":
+            if topic is None:
+                _emit(
+                    {
+                        "error": (
+                            "secret 'ntfy_topic' not resolvable — store it in the OS keyring"
+                            " (service 'dexpaprika') or set DEXPAPRIKA_SECRET_NTFY_TOPIC"
+                        )
+                    },
+                    as_json=as_json,
+                )
+                return EXIT_FAILURE
+            try:
+                receipt = make_client(topic).publish(
+                    "dexpaprika test",
+                    "Alert channel verification — no action needed.",
+                    priority="min",
+                    tags=["white_check_mark"],
+                )
+            except TransportError as exc:
+                _emit({"error": str(exc)}, as_json=as_json)
+                return EXIT_FAILURE
+            _emit({"sent": True, "receipt": receipt.model_dump(mode="json")}, as_json=as_json)
+            return EXIT_OK
+
+        # check
+        now = datetime.now(UTC)
+        alerts = evaluate(conn, settings=settings, now=now, health=_offline_health(settings))
+        if args.dry_run:
+            _emit(
+                {"dry_run": True, "alerts": [a.model_dump() for a in alerts]},
+                as_json=as_json,
+            )
+            return EXIT_OK
+        fire, suppressed = apply_cooldown(conn, alerts, settings=settings, now=now)
+        client = make_client(topic) if fire and topic is not None else None
+        degraded = False
+        fired_payload: list[dict[str, Any]] = []
+        for alert in fire:
+            # Record BEFORE delivery: a dead channel loses a notification,
+            # never the record of why it fired.
+            alert_id = record_alert(conn, alert, now=now)
+            if client is None:
+                mark_delivery(conn, alert_id, delivered=False, ntfy_status="no-topic")
+                degraded = True
+                delivery = "no-topic"
+            else:
+                try:
+                    client.publish(
+                        alert.title,
+                        alert.message,
+                        priority=alert.severity,
+                        tags=alert.tags,
+                    )
+                    mark_delivery(conn, alert_id, delivered=True, ntfy_status="200")
+                    delivery = "delivered"
+                except TransportError as exc:
+                    mark_delivery(conn, alert_id, delivered=False, ntfy_status=str(exc))
+                    degraded = True
+                    delivery = "failed"
+            fired_payload.append({**alert.model_dump(), "delivery": delivery})
+        _emit(
+            {
+                "fired": fired_payload,
+                "suppressed": [a.model_dump() for a in suppressed],
+                "degraded": degraded,
+            },
+            as_json=as_json,
+        )
+        return EXIT_DEGRADED if degraded else EXIT_OK
+    except QuotaError as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+
+
 # ------------------------------- parser -------------------------------
 
 
@@ -958,6 +1050,23 @@ def build_parser() -> argparse.ArgumentParser:
     h_sim.add_argument("--curve", type=int, default=9, help="N points floor→ceiling.")
     _add_json_flag(h_sim)
 
+    alerts = subparsers.add_parser(
+        "alerts", help="Alert rules over recorded state + ntfy delivery."
+    )
+    alerts_sub = alerts.add_subparsers(dest="alerts_command", required=True)
+    a_check = alerts_sub.add_parser(
+        "check", help="Evaluate rules → record → deliver (scheduler entrypoint)."
+    )
+    a_check.add_argument(
+        "--dry-run", action="store_true", help="Evaluate and print; record/send nothing."
+    )
+    _add_json_flag(a_check)
+    a_test = alerts_sub.add_parser("test", help="Send one live test notification.")
+    _add_json_flag(a_test)
+    a_log = alerts_sub.add_parser("log", help="Alert firing history (audit).")
+    a_log.add_argument("--limit", type=int, default=20)
+    _add_json_flag(a_log)
+
     return parser
 
 
@@ -986,6 +1095,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_report(as_json=args.as_json)
     if args.command == "hedge":
         return _cmd_hedge(args, as_json=args.as_json)
+    if args.command == "alerts":
+        return _cmd_alerts(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

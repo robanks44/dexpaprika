@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -52,7 +52,7 @@ def settings() -> Settings:
 
 
 def _insert_position(
-    conn: sqlite3.Connection, kind: str, state: dict[str, object], *, ts: str
+    conn: sqlite3.Connection, kind: str, state: Mapping[str, object], *, ts: str
 ) -> None:
     group = "lp_hedge"
     cur = conn.execute(
@@ -74,7 +74,9 @@ def _insert_snapshot(conn: sqlite3.Connection, ts: str) -> None:
     )
 
 
-def _fresh(conn: sqlite3.Connection, lp: dict[str, object], perp: dict[str, object] | None) -> None:
+def _fresh(
+    conn: sqlite3.Connection, lp: Mapping[str, object], perp: Mapping[str, object] | None
+) -> None:
     ts = NOW.isoformat()
     _insert_position(conn, "lp", lp, ts=ts)
     if perp is not None:

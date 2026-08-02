@@ -177,7 +177,7 @@ def test_check_without_topic_degraded_but_recorded(
 ) -> None:
     _snapshot(capsys)
     monkeypatch.delenv("DEXPAPRIKA_SECRET_NTFY_TOPIC")
-    code, out = run_json(capsys, "alerts", "check")
+    code, _out = run_json(capsys, "alerts", "check")
     assert code == EXIT_DEGRADED
     assert ntfy.requests == []
     rows = _log_rows(capsys)
