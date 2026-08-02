@@ -89,6 +89,22 @@ dexpaprika quota --provider coinstats --json
 - A `credit-budget` denial cannot be waited out — it clears next UTC month.
   Raise the budget in the `providers` table only if the paid plan actually changed.
 
+## Market data — DexPaprika (S3)
+
+```
+dexpaprika market pool  --network base --address <pool> [--record] --json
+dexpaprika market ohlcv --network base --address <pool> --start YYYY-MM-DD \
+                        [--interval 24h] [--limit N] [--record] --json
+```
+
+- Requires a migrated DB (quota tracking lives there). All calls are
+  quota-gated at 30/min and logged — check spend with `dexpaprika quota`.
+- ROLE BOUNDARY: DexPaprika prices are history/volume ONLY (~2% skew verified).
+  Never use them for range/edge or hedge math — that reads the pool contract.
+- `fee` is null for SlipStream pools — expected, not an error.
+- "circuit open for 'dexpaprika'" = 5 consecutive failed calls; wait ~60s,
+  it self-heals on the next successful probe.
+
 ## Gates (build sessions)
 
 ```

@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S3 — DexPaprika client — `in_progress` (started 2026-08-02)
+- Current section: S3 complete — next: S4 GMX data client
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s2.5-complete | main tip at last update: the s2.5 merge commit (see `git log`)
+- Last completed tag: s3-complete | main tip at last update: the s3 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -193,7 +193,7 @@
   would under-throttle it, and a credits-window would break CoinStats. Both now
   first-class.
 
-### S3 — DexPaprika client — `in_progress`
+### S3 — DexPaprika client — `complete`
 - Attempts: 1
 - Branch: `section/s3-dexpaprika-client` | Merge commit: — | Tag: —
 - Reference docs read: dex-docs/QUICK-REFERENCE.md (endpoint shapes, intervals, limits —
@@ -205,8 +205,13 @@
 - Design notes / decisions: shared HttpTransport (quota+retry+breaker+Decimal parse)
   reused by S4+; DexPaprika price NEVER exposed as hedge-math price (role boundary);
   ohlcv upsert idempotent; 0002_market_data migration
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Test summary (written before code): 24 tests from probe fixtures — transport
+  (quota/Decimal/retry/breaker/caps), client parsing + recording idempotence,
+  role-boundary, CLI e2e; +1 connection-error coverage test post-impl (justified)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of ba00b3b, make test
+  PASS (161 passed; "Required test coverage of 80% reached. Total coverage: 95.34%"),
+  make audit PASS; optional live smoke SUCCEEDED (real pool call recorded,
+  price Decimal string end-to-end, quota logged the call: window_used=1)
+- Coverage: 95.34% total; transport 100%, client 100% | ruff/mypy/bandit/pip-audit clean
+- Test-change justifications: commit ba00b3b (coverage addition only)
+- Completed: 2026-08-02
