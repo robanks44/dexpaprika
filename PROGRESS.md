@@ -420,3 +420,25 @@
   contract (not-implemented no longer exists; network pair mocked in the DB-
   focused test — drilled for real in test_integration.py); RUNBOOK placeholder
   commands normalized to parseable examples (the new doc-integrity gate at work)
+
+### S11 — Cloud packaging — `in-progress`
+- Attempts: 1
+- Branch: `section/s11-packaging` | Merge commit: — | Tag: —
+- Reference docs read: ENGINEERING_STANDARDS §6 (one artifact, compose parity,
+  externalized scheduling, documented Timescale path) + §3 (CycloneDX SBOM);
+  timescaledb--api-reference--lp-tracker.md (create_hypertable/by_range on
+  EMPTY TIMESTAMPTZ tables, hypertable unique-index-must-include-time rule);
+  python-scheduling playbook Option B (APScheduler for the persistent
+  VPS/container process: max_instances=1, coalesce, misfire_grace_time, pin
+  major)
+- Probe evidence (Step 2b): sandbox dockerd started + Docker Hub pull verified
+  live (python:3.13-slim); compose v5 present; rehearsal report will land in
+  probes/out/s11/
+- Design notes / decisions: scheduler subcommand (Option B) drives the SAME CLI
+  mains in-process with per-run JSON exit-code lines; compose = one scheduler
+  service, env-backend secrets (the §3 provider swap), read-only rootfs; PG
+  dialect translation gate-tested pure, rehearsal executed against disposable
+  timescale/timescaledb pg16; hypertables limited to append-only non-FK-target
+  tables (api_call_log, pool_metrics, ohlcv) per the unique-index rule; SBOM
+  from the FROZEN no-dev export attached to `make release`
+- Spec: docs/specs/S11-packaging.md
