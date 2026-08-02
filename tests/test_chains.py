@@ -123,20 +123,14 @@ def make_client(
 
 
 def base_dispatch(pin_offset: int = 0) -> dict[str, Callable[[list[Any]], Any]]:
-    """A healthy Base node replaying the probe aggregate response."""
+    """A healthy Base node replaying the probe aggregate response.
 
-    def eth_call(params: list[Any]) -> str:
-        raw: str = PROBE["base"]["raw_response"]
-        if pin_offset:
-            block_number, _outs = decode_aggregate(raw)
-            b = bytes.fromhex(raw[2:])
-            patched = (block_number + pin_offset).to_bytes(32, "big") + b[32:]
-            return "0x" + patched.hex()
-        return raw
-
+    ``pin_offset`` shifts the head the node reports WITHOUT shifting the
+    (fixture) tripwire answer — simulating a lagging load-balanced node.
+    """
     return {
-        "eth_blockNumber": lambda _p: hex(PROBE["base"]["pin"] + 3),
-        "eth_call": eth_call,
+        "eth_blockNumber": lambda _p: hex(PROBE["base"]["pin"] + 3 + pin_offset),
+        "eth_call": lambda _p: PROBE["base"]["raw_response"],
     }
 
 
@@ -157,8 +151,8 @@ class TestRpcClient:
         assert row["kind"] == "test"
 
     def test_pin_mismatch_raises_and_does_not_record(self, conn: sqlite3.Connection) -> None:
-        client = make_client(conn, "base", [rpc_handler(base_dispatch(pin_offset=-5))])
-        with pytest.raises(PinMismatchError, match="lagging|pinned"):
+        client = make_client(conn, "base", [rpc_handler(base_dispatch(pin_offset=5))])
+        with pytest.raises(PinMismatchError, match=r"lagging|pinned"):
             client.snapshot("test")
         assert conn.execute("SELECT COUNT(*) AS n FROM snapshots").fetchone()["n"] == 0
 
@@ -232,3 +226,43 @@ class TestArbitrumTripwire:
         # The batch must contain the ArbSys tripwire target, not rely on
         # Multicall3's own (L1) block number.
         assert ARBSYS[2:].lower() in seen_calls[0].lower()
+
+
+class TestRpcErrorPaths:
+    def test_unknown_chain_rejected(self, conn: sqlite3.Connection) -> None:
+        with pytest.raises(ChainRpcError, match="unknown chain"):
+            EvmRpcClient(conn, "dogechain", sleeper=lambda _s: None)
+
+    def test_jsonrpc_error_rotates_then_exhausts(self, conn: sqlite3.Connection) -> None:
+        def handle(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                text=json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "error": {"code": -32005, "message": "rate limited"},
+                    }
+                ),
+            )
+
+        client = make_client(conn, "base", [httpx.MockTransport(handle)] * 3)
+        with pytest.raises(ChainRpcError, match=r"ring exhausted.*rate limited"):
+            client.block_number()
+
+    def test_chain_id_mismatch_names_misconfiguration(self, conn: sqlite3.Connection) -> None:
+        wrong = dict(base_dispatch())
+
+        def eth_call(_params: list[Any]) -> str:
+            # Patch the fixture response's chainId word (second inner output).
+            raw: str = PROBE["base"]["raw_response"]
+            blob = bytearray(bytes.fromhex(raw[2:]))
+            arr_off = int.from_bytes(blob[32:64], "big")
+            second_off = arr_off + 32 + int.from_bytes(blob[arr_off + 64 : arr_off + 96], "big")
+            blob[second_off + 32 : second_off + 64] = (1).to_bytes(32, "big")
+            return "0x" + blob.hex()
+
+        wrong["eth_call"] = eth_call
+        client = make_client(conn, "base", [rpc_handler(wrong)])
+        with pytest.raises(ChainRpcError, match="misconfigured"):
+            client.snapshot("test")

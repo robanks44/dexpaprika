@@ -42,8 +42,13 @@ class Settings(BaseSettings):
     base_rpc_urls: CommaList = [
         "https://base-rpc.publicnode.com",
         "https://base.llamarpc.com",
+        "https://mainnet.base.org",
     ]
-    arbitrum_rpc_urls: CommaList = ["https://arb1.arbitrum.io/rpc"]
+    arbitrum_rpc_urls: CommaList = [
+        "https://arb1.arbitrum.io/rpc",
+        "https://arbitrum-one-rpc.publicnode.com",
+        "https://arbitrum.llamarpc.com",
+    ]
     gmx_rest_peers: CommaList = [
         "https://arbitrum.gmxapi.io/v1",
         "https://arbitrum.gmxapi.ai/v1",

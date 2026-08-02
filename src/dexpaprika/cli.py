@@ -258,7 +258,11 @@ def _http_client_factory(base_url: str) -> Any:
     """Real HTTP client for CLI-constructed API clients (tests monkeypatch this)."""
     import httpx
 
-    return httpx.Client(base_url=base_url, timeout=30.0)
+    return httpx.Client(
+        base_url=base_url,
+        timeout=30.0,
+        headers={"User-Agent": "dexpaprika/1.0"},  # arb1 403s the default UA
+    )
 
 
 def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
@@ -313,6 +317,46 @@ def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
     finally:
         conn.close()
     _emit(payload, as_json=as_json)
+    return EXIT_OK
+
+
+def _cmd_chain(args: argparse.Namespace, *, as_json: bool) -> int:
+    from dexpaprika.chains import ChainRpcError, EvmRpcClient
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first (quota tracking)"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    chains = ["base", "arbitrum"] if args.chain == "all" else [args.chain]
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        results: dict[str, Any] = {}
+        for chain in chains:
+            urls = settings.base_rpc_urls if chain == "base" else settings.arbitrum_rpc_urls
+            client = EvmRpcClient(
+                conn,
+                chain,
+                settings=settings,
+                clients=[_http_client_factory(url) for url in urls],
+            )
+            snap = client.snapshot("chain-snapshot")
+            results[chain] = {
+                "block_number": snap.block_number,
+                "ts": snap.ts,
+                "tripwire": "ok",
+            }
+    except (ChainRpcError, QuotaError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit({"chains": results}, as_json=as_json)
     return EXIT_OK
 
 
@@ -498,6 +542,14 @@ def build_parser() -> argparse.ArgumentParser:
     g_pos.add_argument("--record", action="store_true", help="Persist observation to DB.")
     _add_json_flag(g_pos)
 
+    chain = subparsers.add_parser(
+        "chain", help="Block-pinned on-chain snapshots (tripwire-verified)."
+    )
+    chain_sub = chain.add_subparsers(dest="chain_command", required=True)
+    c_snap = chain_sub.add_parser("snapshot", help="Pin + verify + record per chain.")
+    c_snap.add_argument("--chain", default="all", choices=("base", "arbitrum", "all"))
+    _add_json_flag(c_snap)
+
     return parser
 
 
@@ -516,6 +568,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_market(args, as_json=args.as_json)
     if args.command == "gmx":
         return _cmd_gmx(args, as_json=args.as_json)
+    if args.command == "chain":
+        return _cmd_chain(args, as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

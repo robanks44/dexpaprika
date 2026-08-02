@@ -81,8 +81,12 @@ def test_chain_snapshot_all(capsys: pytest.CaptureFixture[str], mock_rpc: None) 
     assert code == EXIT_OK
     chains = out["chains"]
     assert isinstance(chains, dict)
-    assert chains["base"]["block_number"] == PROBE["base"]["pin"]  # type: ignore[index]
-    assert chains["arbitrum"]["block_number"] == PROBE["arbitrum"]["arbsys_pin_used"]  # type: ignore[index]
+    base_entry = chains["base"]
+    assert isinstance(base_entry, dict)
+    assert base_entry["block_number"] == PROBE["base"]["pin"]
+    arb_entry = chains["arbitrum"]
+    assert isinstance(arb_entry, dict)
+    assert arb_entry["block_number"] == PROBE["arbitrum"]["arbsys_pin_used"]
 
 
 def test_chain_snapshot_single(capsys: pytest.CaptureFixture[str], mock_rpc: None) -> None:

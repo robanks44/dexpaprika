@@ -100,41 +100,68 @@ class HttpTransport:
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET ``path`` and return its JSON with all numbers as int/Decimal."""
+        return self._request("GET", path, params=params)
+
+    def post_json(
+        self,
+        path: str,
+        json_payload: dict[str, Any],
+        endpoint_label: str | None = None,
+    ) -> Any:
+        """POST JSON (e.g. JSON-RPC); same quota/retry/breaker/Decimal discipline."""
+        return self._request("POST", path, json_payload=json_payload, label=endpoint_label)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_payload: dict[str, Any] | None = None,
+        label: str | None = None,
+    ) -> Any:
+        endpoint = label or path
         self._breaker_gate()
         correlation_id = uuid.uuid4().hex
         last_error = "no attempt made"
         for attempt in range(self._max_attempts):
-            self._quota.wait_for_slot(self._provider, path, sleeper=self._sleeper)
+            self._quota.wait_for_slot(self._provider, endpoint, sleeper=self._sleeper)
             started = self._clock()
             try:
-                response = self._client.get(path, params=params)
+                if method == "POST":
+                    response = self._client.post(path, json=json_payload)
+                else:
+                    response = self._client.get(path, params=params)
             except httpx.HTTPError as exc:
-                self._quota.record(self._provider, path, status=None, correlation_id=correlation_id)
+                self._quota.record(
+                    self._provider, endpoint, status=None, correlation_id=correlation_id
+                )
                 last_error = f"transport error: {exc}"
                 self._backoff(attempt)
                 continue
             latency_ms = int((self._clock() - started).total_seconds() * 1000)
             self._quota.record(
                 self._provider,
-                path,
+                endpoint,
                 status=response.status_code,
                 latency_ms=latency_ms,
                 correlation_id=correlation_id,
             )
             if response.status_code in _RETRYABLE_STATUS:
-                last_error = f"HTTP {response.status_code} from {self._provider} {path}"
+                last_error = f"HTTP {response.status_code} from {self._provider} {endpoint}"
                 self._backoff(attempt)
                 continue
             if response.status_code >= 400:
                 # Non-retryable client error: not an upstream-health signal.
                 msg = (
-                    f"HTTP {response.status_code} from {self._provider} {path} —"
+                    f"HTTP {response.status_code} from {self._provider} {endpoint} —"
                     " check the identifier/parameters (no retry)"
                 )
                 raise TransportError(msg)
-            return self._parse(response, path)
+            return self._parse(response, endpoint)
         self._on_exhausted()
-        msg = f"{self._provider} {path} failed after {self._max_attempts} attempts: {last_error}"
+        msg = (
+            f"{self._provider} {endpoint} failed after {self._max_attempts} attempts: {last_error}"
+        )
         raise TransportError(msg)
 
     def _backoff(self, attempt: int) -> None:
