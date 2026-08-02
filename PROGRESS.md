@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `setup`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S0 (scaffold) — awaiting fresh-agent verification + Richard's handoff approval
+- Current section: S0 complete — awaiting Richard's handoff approval (setup Step 5)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: — (s0-complete pending fresh-agent gate) | main tip at last update: see `git log`
+- Last completed tag: s0-complete | main tip at last update: the tagged commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -26,7 +26,7 @@
 - [x] Research done — findings logged below
 - [x] ARCHITECTURE.md written
 - [x] SECTION_PLAN.md written
-- [ ] Scaffold complete; suite + static gates verified clean by fresh agent
+- [x] Scaffold complete; suite + static gates verified clean by fresh agent (2026-08-02)
 - [ ] Richard approved handoff report
 
 ## Scope confirmations (Richard, 2026-08-02)
@@ -49,7 +49,7 @@
 
 ## Section log
 
-### S0 — Scaffold & tooling — `in_progress` (setup phase)
+### S0 — Scaffold & tooling — `complete` (setup phase)
 - Attempts: 1
 - Branch: built directly on `main` (setup phase, pre-loop; GIT_RULES §2 permits
   docs/state on main — scaffold committed before first verifier run, per SETUP Step 4 order)
@@ -67,11 +67,11 @@
     `SickleFactory.sickles(wallet)` (factory 0x71D234A3…) returns it deterministically
 - Design notes / decisions: see ARCHITECTURE.md §9 + decision log below
 - Test summary: 7 gate tests (CLI JSON contract, exit codes, degraded healthcheck)
-- Verifier verdict: — (pending)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of commit 8e76c91, uv sync --frozen, make test PASS (ruff clean; mypy clean; 7 passed; "Required test coverage of 80% reached. Total coverage: 95.74%"), make audit PASS
 - Coverage: 95.74% | ruff: clean | mypy --strict: clean | bandit: clean | pip-audit: clean
   (self-package skip only)
 - Test-change justifications: none
-- Completed: —
+- Completed: 2026-08-02
 
 ## Research findings log
 
