@@ -88,13 +88,26 @@ class TestInstructionValidation:
             OrderInstruction(action="cancel-order")
 
     def test_summary_restates_parameters(self) -> None:
+        key = "0x" + "ab" * 32
         instruction = OrderInstruction(
-            action="set-sl-trigger", order_key="0xabc", trigger_price=Decimal("1926")
+            action="set-sl-trigger", order_key=key, trigger_price=Decimal("1926")
         )
         summary = instruction.summary()
         assert "1926" in summary
-        assert "0xabc" in summary
+        assert key in summary
         assert "ETH/USD" in summary
+
+    def test_hard_parameter_ranges(self) -> None:
+        key = "0x" + "ab" * 32
+        with pytest.raises(ValueError, match="sane range"):
+            OrderInstruction(action="set-sl-trigger", order_key=key, trigger_price=Decimal("-5"))
+        with pytest.raises(ValueError, match="sane range"):
+            OrderInstruction(action="resize-short", target_eth=Decimal("101"))
+        with pytest.raises(ValueError, match="hex key"):
+            OrderInstruction(
+                action="cancel-order",
+                order_key="0xabc",  # not a 32-byte key
+            )
 
 
 @pytest.fixture

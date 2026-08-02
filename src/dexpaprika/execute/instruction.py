@@ -42,6 +42,21 @@ class OrderInstruction(BaseModel, frozen=True):
         if self.action == "cancel-order" and self.order_key is None:
             msg = "cancel-order requires order_key"
             raise ValueError(msg)
+        # Hard parameter ranges IN PYTHON (verifier finding #1 — the spec's
+        # claim now matches the code; the sidecar's checks are a second net).
+        if self.trigger_price is not None and not (
+            Decimal(0) < self.trigger_price < Decimal(1_000_000)
+        ):
+            msg = f"trigger_price {self.trigger_price} outside sane range (0, 1e6)"
+            raise ValueError(msg)
+        if self.target_eth is not None and not (Decimal(0) <= self.target_eth <= Decimal(100)):
+            msg = f"target_eth {self.target_eth} outside sane range [0, 100]"
+            raise ValueError(msg)
+        if self.order_key is not None and not (
+            self.order_key.startswith("0x") and len(self.order_key) == 66
+        ):
+            msg = f"order_key {self.order_key!r} is not a 32-byte hex key"
+            raise ValueError(msg)
         return self
 
     def canonical(self) -> str:

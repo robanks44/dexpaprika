@@ -513,7 +513,7 @@
 - Completed: 2026-08-02
 - Deferred: Solana client — new section when Richard provides the address
 
-### S9 — Hedge order execution (PRIVILEGED) — `in-progress`
+### S9 — Hedge order execution (PRIVILEGED) — `complete` (armed path UNEXERCISED — supervised session pending)
 - Attempts: 1
 - Branch: `section/s9-execution` | Merge commit: — | Tag: —
 - GO-AHEAD RECORDED: Richard, "start s9", 2026-08-02. Decisions: subaccount +
@@ -553,3 +553,22 @@
   --price 1926` (no --arm): real SL order key auto-resolved via sidecar
   read, real prepareEditOrder request built (request_id from GMX API),
   trigger 1926e30 in plan, NOTHING submitted, exit 0
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 1ee8c5b, make test
+  PASS (386 passed; coverage 92.90%, execute/* all >=90%), make audit PASS;
+  adversarial safety review traced execute_instruction line-by-line: NO path to
+  submit without kill-clear + ARMED file + --arm + limits + id-bound approval; no
+  code removes the kill switch; key only in submit-mode subprocess env; live
+  dry-run e2e reproduced independently (real order key, 1926e30 plan, zero
+  submission rows, no ntfy contact, no ARMED/KILL files)
+- Verifier findings fixed pre-merge (test-change justification: hardening from
+  verifier findings): #1 Python-side hard param ranges (trigger (0,1e6), target
+  [0,100] ETH, 32-byte order keys); #2 `execute arm` now audited; #3 submission
+  rate-limit window spans midnight; #5 kill switch halts the read-only key
+  auto-resolution too. Finding #4 (SDK error strings in audit payloads) on file
+  for the supervised session review
+- Coverage: 92.85% total; approval 100%, safety 95%, engine 93%, instruction 92%
+- Completed (dry-run scope): 2026-08-02
+- PENDING WITH RICHARD (supervised session): subaccount generation + his one
+  authorization tx + gmx_subaccount_key storage + the $1 SL nudge through the
+  full approval flow (then nudge back); resize-short submit enabled at that
+  session; live path stays fail-closed until then

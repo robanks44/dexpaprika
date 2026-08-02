@@ -151,8 +151,12 @@ def check_limits(
                 f"daily adjustment cap reached ({len(today)}/{settings.max_daily_adjustments})"
             ),
         )
+    # Queried independently of the daily list so the window spans midnight
+    # (verifier finding #3).
     cutoff = now - timedelta(seconds=settings.order_rate_limit_seconds)
-    window = [r for r in today if datetime.fromisoformat(r["ts"]) > cutoff]
+    window = [
+        r for r in _recent_submissions(conn, cutoff) if datetime.fromisoformat(r["ts"]) > cutoff
+    ]
     if window:
         return GateResult(
             allowed=False,

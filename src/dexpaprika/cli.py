@@ -1080,6 +1080,18 @@ def _cmd_execute(args: argparse.Namespace, *, as_json: bool) -> int:
         except RuntimeError as exc:
             _emit({"error": str(exc)}, as_json=as_json)
             return EXIT_FAILURE
+        # Arming is a privileged state change — audited (verifier finding #2).
+        arm_db = db_path(settings)
+        if arm_db.exists():
+            arm_conn = connect(arm_db)
+            try:
+                arm_conn.execute(
+                    "INSERT INTO audit_log (ts, actor, action, phase, payload_json)"
+                    " VALUES (?, 'executor', 'arm', 'intent', ?)",
+                    (now.isoformat(), json.dumps({"ttl_minutes": args.ttl_minutes})),
+                )
+            finally:
+                arm_conn.close()
         _emit(
             {"armed": True, "path": str(armed_path), "ttl_minutes": args.ttl_minutes},
             as_json=as_json,
@@ -1122,6 +1134,12 @@ def _cmd_execute(args: argparse.Namespace, *, as_json: bool) -> int:
         if args.execute_command == "set-sl-trigger":
             order_key = args.key
             if order_key is None:
+                # Kill switch halts even this read-only resolution call
+                # (verifier finding #5: no network activity while tripped).
+                kill = check_kill_switch(settings)
+                if not kill.allowed:
+                    _emit({"error": kill.reason}, as_json=as_json)
+                    return EXIT_DEGRADED
                 read = sidecar({"mode": "read", "action": "read-orders", "params": {}})
                 orders = read.get("orders", []) if read.get("ok") else []
                 if not orders:
