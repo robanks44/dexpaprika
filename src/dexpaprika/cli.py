@@ -320,6 +320,222 @@ def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _derive_lifecycle_since(conn: Any, max_event_id_before: int) -> None:
+    from dexpaprika.portfolio.lifecycle import observe
+
+    rows = conn.execute(
+        "SELECT DISTINCT position_id, ts FROM position_events WHERE type='observed' AND id > ?",
+        (max_event_id_before,),
+    ).fetchall()
+    for row in rows:
+        observe(conn, row["position_id"], row["ts"])
+
+
+def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+
+    from dexpaprika.chains import ChainRpcError, EvmRpcClient
+    from dexpaprika.clients.base import TransportError
+    from dexpaprika.clients.gmx import GmxClient
+    from dexpaprika.lp.discovery import VENUE as LP_VENUE
+    from dexpaprika.lp.discovery import discover
+    from dexpaprika.lp.discovery import record as record_lp
+    from dexpaprika.portfolio.aave import read_account
+    from dexpaprika.portfolio.aave import record as record_aave
+    from dexpaprika.portfolio.holdings import read_holdings
+    from dexpaprika.portfolio.holdings import record as record_holdings
+    from dexpaprika.portfolio.lifecycle import reconcile_closures
+    from dexpaprika.quota import QuotaError, QuotaTracker
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    if args.address:
+        wallets = [args.address]
+    else:
+        wallets = [
+            w.address
+            for w in _registry(settings).list_wallets()
+            if w.chain_family == "evm" and w.included
+        ]
+        if not wallets:
+            _emit(
+                {"error": "no included EVM wallets in the registry — pass --address"},
+                as_json=as_json,
+            )
+            return EXIT_FAILURE
+    kinds = ["lp", "hedge", "defi", "holdings"] if args.kind == "all" else [args.kind]
+    ts = datetime.now(UTC).isoformat()
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        recorded: dict[str, int] = {}
+
+        def max_event_id() -> int:
+            row = conn.execute("SELECT COALESCE(MAX(id), 0) AS m FROM position_events").fetchone()
+            return int(row["m"])
+
+        base_rpc = None
+        if any(k in kinds for k in ("lp", "defi", "holdings")):
+            base_rpc = EvmRpcClient(
+                conn,
+                "base",
+                settings=settings,
+                clients=[_http_client_factory(url) for url in settings.base_rpc_urls],
+            )
+            base_pin = base_rpc.resolve_pin()
+
+        if "lp" in kinds and base_rpc is not None:
+            before = max_event_id()
+            count = 0
+            for wallet in wallets:
+                positions = discover(base_rpc, wallet, settings=settings, block=base_pin)
+                for position in positions:
+                    record_lp(conn, wallet, position, ts)
+                    count += 1
+                reconcile_closures(
+                    conn,
+                    wallet,
+                    LP_VENUE,
+                    "lp",
+                    [f"{p.nfpm.lower()}:{p.token_id}" for p in positions],
+                    ts,
+                )
+            _derive_lifecycle_since(conn, before)
+            conn.execute(
+                "INSERT INTO snapshots (ts, chain, block_number, kind) VALUES (?, 'base', ?, 'lp')",
+                (ts, base_pin),
+            )
+            recorded["lp"] = count
+
+        if "hedge" in kinds:
+            before = max_event_id()
+            gmx = GmxClient(
+                conn,
+                settings=settings,
+                clients=[_http_client_factory(peer) for peer in settings.gmx_rest_peers],
+            )
+            count = 0
+            for wallet in wallets:
+                positions_g = gmx.get_positions(wallet)
+                for position_g in positions_g:
+                    gmx.record_observation(position_g)
+                    count += 1
+                reconcile_closures(conn, wallet, "gmx", "perp", [p.key for p in positions_g], ts)
+            _derive_lifecycle_since(conn, before)
+            conn.execute(
+                "INSERT INTO snapshots (ts, chain, block_number, kind)"
+                " VALUES (?, 'arbitrum', NULL, 'hedge')",
+                (ts,),
+            )
+            recorded["hedge"] = count
+
+        if "defi" in kinds and base_rpc is not None:
+            before = max_event_id()
+            count = 0
+            for wallet in wallets:
+                account = read_account(base_rpc, wallet, settings=settings, block=base_pin)
+                count += record_aave(conn, wallet, account, ts)
+            _derive_lifecycle_since(conn, before)
+            conn.execute(
+                "INSERT INTO snapshots (ts, chain, block_number, kind)"
+                " VALUES (?, 'base', ?, 'defi')",
+                (ts, base_pin),
+            )
+            recorded["defi"] = count
+
+        if "holdings" in kinds and base_rpc is not None:
+            before = max_event_id()
+            count = 0
+            for wallet in wallets:
+                holdings = read_holdings(base_rpc, "base", wallet, block=base_pin)
+                count += record_holdings(conn, wallet, "base", holdings, ts)
+            _derive_lifecycle_since(conn, before)
+            conn.execute(
+                "INSERT INTO snapshots (ts, chain, block_number, kind)"
+                " VALUES (?, 'base', ?, 'holdings')",
+                (ts, base_pin),
+            )
+            recorded["holdings"] = count
+    except (ChainRpcError, TransportError, QuotaError) as exc:
+        _emit({"error": str(exc)}, as_json=as_json)
+        return EXIT_FAILURE
+    finally:
+        conn.close()
+    _emit({"ts": ts, "wallets": wallets, "recorded": recorded}, as_json=as_json)
+    return EXIT_OK
+
+
+def _cmd_report(*, as_json: bool) -> int:
+    from decimal import Decimal
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` and `snapshot` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        rows = conn.execute(
+            "SELECT p.id, p.venue, p.chain, p.kind, p.external_id, p.group_tag,"
+            " e.ts AS as_of, e.state_json"
+            " FROM positions p"
+            " JOIN position_events e ON e.position_id = p.id AND e.type='observed'"
+            " WHERE p.closed_at IS NULL"
+            " AND e.id = (SELECT MAX(id) FROM position_events"
+            "             WHERE position_id = p.id AND type='observed')"
+        ).fetchall()
+        groups: dict[str, list[dict[str, Any]]] = {"lp_hedge": [], "defi": [], "holdings": []}
+        lp_value = Decimal(0)
+        defi_net = Decimal(0)
+        for row in rows:
+            state = json.loads(row["state_json"])
+            entry: dict[str, Any] = {
+                "venue": row["venue"],
+                "chain": row["chain"],
+                "kind": row["kind"],
+                "external_id": row["external_id"],
+                "as_of": row["as_of"],
+                "source": state.get("source", "on-chain"),
+            }
+            if row["kind"] == "lp" and state.get("amount0") and state.get("price_usd"):
+                value = Decimal(state["amount0"]) * Decimal(state["price_usd"]) + Decimal(
+                    state.get("amount1") or "0"
+                )
+                entry["value_usd"] = str(value.quantize(Decimal("0.01")))
+                entry["in_range"] = state.get("in_range")
+                lp_value += value
+            elif row["kind"] in ("lend", "borrow") and state.get("amount_usd"):
+                amount = Decimal(state["amount_usd"])
+                entry["amount_usd"] = str(amount)
+                entry["health_factor"] = state.get("health_factor")
+                defi_net += amount if row["kind"] == "lend" else -amount
+            elif row["kind"] == "perp":
+                entry["size_usd"] = state.get("size_usd")
+                entry["mark_price"] = state.get("mark_price")
+                entry["stop_loss_triggers"] = state.get("stop_loss_triggers")
+            elif row["kind"] == "holding":
+                entry["symbol"] = state.get("symbol")
+                entry["amount"] = state.get("amount")
+            groups[row["group_tag"]].append(entry)
+        totals = {
+            "lp_value": str(lp_value.quantize(Decimal("0.01"))),
+            "defi_net": str(defi_net.quantize(Decimal("0.01"))),
+        }
+    finally:
+        conn.close()
+    _emit({"groups": groups, "totals_usd": totals}, as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_lp(args: argparse.Namespace, *, as_json: bool) -> int:
     from dexpaprika.chains import ChainRpcError, EvmRpcClient
     from dexpaprika.lp.discovery import discover, record
@@ -628,6 +844,18 @@ def build_parser() -> argparse.ArgumentParser:
     lp_snap.add_argument("--record", action="store_true", help="Persist positions + snapshot row.")
     _add_json_flag(lp_snap)
 
+    snapshot = subparsers.add_parser(
+        "snapshot", help="Record the portfolio (LP, hedge, defi, holdings) + lifecycle events."
+    )
+    snapshot.add_argument(
+        "--kind", default="all", choices=("lp", "hedge", "defi", "holdings", "all")
+    )
+    snapshot.add_argument("--address", default=None, help="Default: all included EVM wallets.")
+    _add_json_flag(snapshot)
+
+    report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
+    _add_json_flag(report)
+
     return parser
 
 
@@ -650,6 +878,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_chain(args, as_json=args.as_json)
     if args.command == "lp":
         return _cmd_lp(args, as_json=args.as_json)
+    if args.command == "snapshot":
+        return _cmd_snapshot(args, as_json=args.as_json)
+    if args.command == "report":
+        return _cmd_report(as_json=args.as_json)
     # Required subparsers guarantee the only remaining command is "wallets".
     return _cmd_wallets(args, as_json=args.as_json)
 

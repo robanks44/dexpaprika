@@ -87,7 +87,7 @@ def test_snapshot_all_records_every_group(
 def test_snapshot_is_idempotent(capsys: pytest.CaptureFixture[str], mock_everything: None) -> None:
     _setup(capsys)
     run_json(capsys, "snapshot", "--kind", "all")
-    code, out = run_json(capsys, "snapshot", "--kind", "all")
+    code, _out = run_json(capsys, "snapshot", "--kind", "all")
     assert code == EXIT_OK
     # Same positions, no duplicates; events appended.
     import sqlite3

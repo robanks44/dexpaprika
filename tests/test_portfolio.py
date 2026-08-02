@@ -100,7 +100,8 @@ class TestHoldings:
         by_symbol = {h.symbol: h for h in holdings}
         assert by_symbol["ETH"].amount.quantize(Decimal("0.0001")) == Decimal("0.0969")
         assert by_symbol["USDC"].amount == Decimal("96.71236")
-        assert by_symbol["AERO"].amount.quantize(Decimal("0.001")) == Decimal("3.099")
+        # AERO raw 3099251453 at 18 decimals = dust (3.099e-9) — still tracked, >0.
+        assert by_symbol["AERO"].amount == Decimal("3099251453") / Decimal(10**18)
         assert all(h.amount > 0 for h in holdings)
 
     def test_record_holdings(self, conn: sqlite3.Connection) -> None:
