@@ -572,3 +572,16 @@
   authorization tx + gmx_subaccount_key storage + the $1 SL nudge through the
   full approval flow (then nudge back); resize-short submit enabled at that
   session; live path stays fail-closed until then
+
+### Final whole-system verification (2026-08-02)
+- Fresh-agent Step-8 audit of the COMPLETE assembled system from a clean clone of
+  main (ae56bba): "VERDICT: PASS". make test 387 passed/4 live-deselected/92.85%;
+  make audit clean; 15/15 CLI help + doc gate; live read-only smoke all green —
+  snapshot lp1/hedge1/defi2/holdings5(incl BTC 0.00131828), report 3 groups, hedge
+  Q3 coverage 150.8%, alerts rebalance-needed, quota full provider set, scheduler 3
+  jobs, HEALTHCHECK healthy:true 9/9 exit 0 (Step-8 heartbeat MET), execute dry-run
+  submitted NOTHING (intent+simulation only, no ARMED/KILL files); remote in parity.
+- One low-severity drift found + FIXED: healthcheck operational_state hardcoded
+  "execution not built" post-S9 and ignored real armed/kill state. Now reports the
+  true mode (kill-switch tripped / ARMED / dry-run) + live exposure vs limits;
+  verified live (dry-run -> ARMED after `execute arm`). Tests updated (388 passed).

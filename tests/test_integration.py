@@ -227,9 +227,10 @@ class TestHealthcheckCompleteness:
         assert str(checks["last_snapshot_age"]).startswith("fail")
         assert "snapshot" in str(checks["last_snapshot_age"])
 
-    def test_operational_state_reports_execution_disabled(
+    def test_operational_state_reports_real_execution_mode(
         self, capsys: pytest.CaptureFixture[str], world: MockWorld
     ) -> None:
+        """Default (unarmed, no kill switch) reports dry-run mode + exposure."""
         _bootstrap(capsys)
         run_json(capsys, "snapshot")
         _code, health = run_json(capsys, "healthcheck")
@@ -237,7 +238,19 @@ class TestHealthcheckCompleteness:
         assert isinstance(checks, dict)
         state = str(checks["operational_state"])
         assert state.startswith("ok")
-        assert "read-only" in state
+        assert "dry-run" in state
+        assert "not armed" in state
+
+    def test_operational_state_reports_kill_switch(
+        self, capsys: pytest.CaptureFixture[str], world: MockWorld, tmp_path: Path
+    ) -> None:
+        _bootstrap(capsys)
+        run_json(capsys, "snapshot")
+        (tmp_path / "data" / "KILL-SWITCH").write_text("tripped")
+        _code, health = run_json(capsys, "healthcheck")
+        checks = health["checks"]
+        assert isinstance(checks, dict)
+        assert "TRIPPED" in str(checks["operational_state"])
 
     def test_exposure_beyond_configured_limit_fails(
         self,

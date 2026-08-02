@@ -209,8 +209,15 @@ def _check_repo_state(root: Path | None = None) -> str:
 
 
 def _check_operational_state(settings: Settings) -> str:
-    """§2 [v2]: mode, kill-switch, exposure vs limits — the pre-action self-check."""
+    """§2 [v2]: mode, kill-switch, exposure vs limits — the pre-action self-check.
+
+    Reports the REAL execution mode (S9): kill-switch state, whether the
+    executor is currently armed, and live exposure vs the configured caps.
+    """
+    from datetime import UTC, datetime
     from decimal import Decimal
+
+    from dexpaprika.execute.safety import check_armed, check_kill_switch
 
     path = db_path(settings)
     if not path.exists():
@@ -236,7 +243,15 @@ def _check_operational_state(settings: Settings) -> str:
             f"fail: current short exposure ${exposure} exceeds configured"
             f" max_position_usd ${limit} — do not act; resolve limits first"
         )
-    mode = "read-only (execution not built; S9 gated on explicit go-ahead)"
+    now = datetime.now(UTC)
+    kill_tripped = not check_kill_switch(settings).allowed
+    armed = check_armed(settings, arm_flag=True, now=now).allowed
+    if kill_tripped:
+        mode = "kill-switch TRIPPED (all mutating behaviour halted; manual re-arm only)"
+    elif armed:
+        mode = "ARMED (live execution enabled — an order can be placed with approval)"
+    else:
+        mode = "dry-run (not armed; live orders require `execute arm` + --arm + approval)"
     limits = "disabled" if limit == 0 else f"max_position_usd=${limit}"
     return f"ok: {mode}; limits {limits}; short exposure ${exposure}"
 
