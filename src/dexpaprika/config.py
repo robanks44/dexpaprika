@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     ]
     # Pools checked on the CLGauge staked path (gauge custody).
     base_tracked_pools: CommaList = ["0x56aeaf4af2df4bdfd9d865830fefdd278b25e7ef"]
+    # Aave v3 Pool on Base (probe-verified 2026-08-02 via getUserAccountData).
+    aave_pool_base: str = "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"
     dexpaprika_base_url: str = "https://api.dexpaprika.com"
     ntfy_server: str = "https://ntfy.sh"
 
