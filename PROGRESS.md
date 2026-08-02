@@ -471,3 +471,38 @@
   wording fixed); only alerts cadence is env-configurable (snapshot/backup fixed).
 - Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
 - Completed: 2026-08-02
+
+### S5.5 — BTC holdings client (BTC-only) — `complete`
+- Attempts: 1
+- Branch: `section/s55-btc` | Merge commit: — | Tag: —
+- Scope: Richard provided BTC address bc1qwku...7ff (validated bech32 P2WPKH)
+  and chose BTC-only now; Solana deferred to a follow-up section when he
+  provides that address
+- Reference docs read: bitcoin--integration-guide.md (Esplora primary +
+  mempool.space fallback, balance = funded - spent sats, native-BTC-first
+  recommendation; no bitcoin lib needed for balance reads)
+- Probe evidence (Step 2b): probes/out/s55/address_stats.json — LIVE both
+  peers, real wallet: 131,828 sats confirmed (0.00131828 BTC), 2 txs, zero
+  pending; peers byte-identical
+- Design notes / decisions: peer-ring BtcClient (GMX failover pattern), two
+  quota providers (blockstream 60/min + 500k monthly, mempool 30/min
+  conservative); holdings-group integration through the same lifecycle
+  pipeline; snapshots row chain='bitcoin' block NULL (off-chain source per
+  §2); healthcheck reachability unchanged (documented)
+- Spec: docs/specs/S5.5-btc.md
+- Test summary (written before code): 8 tests — probe-exact Decimal
+  (131,828 sats -> "0.00131828"), funded-spent+mempool-delta math, peer
+  failover (blockstream 5xx -> mempool serves, both dead -> detailed error),
+  idempotent holdings upsert with two observations, CLI e2e (EVM+BTC
+  holdings snapshot -> report shows BTC row; btc-only registry works;
+  excluded BTC wallet skipped)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 3f1b65a, make test
+  PASS (346 passed; coverage 94.92%), make audit PASS; adversarial review: no
+  blocking defects (one noted hypothetical: btc-only registry + --kind all writes an
+  empty hedge snapshot row — not reachable with the real registry; on file for a
+  future tidy-up); LIVE SMOKE: real snapshot recorded holdings 5 (4 EVM + 1 BTC),
+  report shows BTC 0.00131828 chain=bitcoin source=esplora:blockstream, healthcheck
+  stays healthy; probe re-fetched live and byte-identical
+- Coverage: 94.92% total; clients/btc.py 100% | all static clean
+- Completed: 2026-08-02
+- Deferred: Solana client — new section when Richard provides the address

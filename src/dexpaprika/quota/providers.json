@@ -108,6 +108,28 @@
       "note": "Public RPC ring for Arbitrum; every call sends the dexpaprika UA (arb1 403s default)."
     },
     {
+      "name": "blockstream",
+      "base_url": "https://blockstream.info/api",
+      "rate_limit": 60,
+      "rate_period": "minute",
+      "has_credits": true,
+      "credit_limit": 500000,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "Esplora free tier: 500k req/month (bitcoin--integration-guide.md); conservative per-minute pace."
+    },
+    {
+      "name": "mempool",
+      "base_url": "https://mempool.space/api",
+      "rate_limit": 30,
+      "rate_period": "minute",
+      "has_credits": false,
+      "credit_limit": null,
+      "free_tier": true,
+      "endpoint_costs": {},
+      "note": "Undocumented public limits — conservative fallback pace."
+    },
+    {
       "name": "ntfy",
       "base_url": "https://ntfy.sh",
       "rate_limit": 30,

@@ -18,8 +18,14 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 # raw string reaches our before-validator).
 CommaList = Annotated[list[str], NoDecode]
 
-_LIST_FIELDS = ("base_rpc_urls", "arbitrum_rpc_urls", "gmx_rest_peers", "allowed_markets")
-_HTTPS_LIST_FIELDS = ("base_rpc_urls", "arbitrum_rpc_urls", "gmx_rest_peers")
+_LIST_FIELDS = (
+    "base_rpc_urls",
+    "arbitrum_rpc_urls",
+    "gmx_rest_peers",
+    "btc_esplora_peers",
+    "allowed_markets",
+)
+_HTTPS_LIST_FIELDS = ("base_rpc_urls", "arbitrum_rpc_urls", "gmx_rest_peers", "btc_esplora_peers")
 _HTTPS_SCALAR_FIELDS = ("dexpaprika_base_url", "ntfy_server")
 
 
@@ -52,6 +58,11 @@ class Settings(BaseSettings):
     gmx_rest_peers: CommaList = [
         "https://arbitrum.gmxapi.io/v1",
         "https://arbitrum.gmxapi.ai/v1",
+    ]
+    # Native-BTC holdings (S5.5): Esplora primary, mempool.space fallback.
+    btc_esplora_peers: CommaList = [
+        "https://blockstream.info/api",
+        "https://mempool.space/api",
     ]
     # SlipStream NFPM registry (>=2 deployments exist on Base — never hardcode one)
     base_nfpm_addresses: CommaList = [

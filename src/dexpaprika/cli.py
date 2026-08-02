@@ -547,6 +547,7 @@ def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
 
     from dexpaprika.chains import ChainRpcError, EvmRpcClient
     from dexpaprika.clients.base import TransportError
+    from dexpaprika.clients.btc import BtcClient
     from dexpaprika.clients.gmx import GmxClient
     from dexpaprika.lp.discovery import VENUE as LP_VENUE
     from dexpaprika.lp.discovery import discover
@@ -566,21 +567,21 @@ def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
             as_json=as_json,
         )
         return EXIT_FAILURE
+    kinds = ["lp", "hedge", "defi", "holdings"] if args.kind == "all" else [args.kind]
+    btc_wallets: list[str] = []
     if args.address:
-        wallets = [args.address]
+        wallets = [args.address]  # explicit override is EVM-only
     else:
-        wallets = [
-            w.address
-            for w in _registry(settings).list_wallets()
-            if w.chain_family == "evm" and w.included
-        ]
-        if not wallets:
+        registered = _registry(settings).list_wallets()
+        wallets = [w.address for w in registered if w.chain_family == "evm" and w.included]
+        if "holdings" in kinds:
+            btc_wallets = [w.address for w in registered if w.chain_family == "btc" and w.included]
+        if not wallets and not btc_wallets:
             _emit(
-                {"error": "no included EVM wallets in the registry — pass --address"},
+                {"error": "no included wallets in the registry — pass --address"},
                 as_json=as_json,
             )
             return EXIT_FAILURE
-    kinds = ["lp", "hedge", "defi", "holdings"] if args.kind == "all" else [args.kind]
     ts = datetime.now(UTC).isoformat()
     conn = connect(path)
     try:
@@ -592,7 +593,7 @@ def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
             return int(row["m"])
 
         base_rpc = None
-        if any(k in kinds for k in ("lp", "defi", "holdings")):
+        if wallets and any(k in kinds for k in ("lp", "defi", "holdings")):
             base_rpc = EvmRpcClient(
                 conn,
                 "base",
@@ -660,25 +661,46 @@ def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
             )
             recorded["defi"] = count
 
-        if "holdings" in kinds and base_rpc is not None:
+        if "holdings" in kinds and (base_rpc is not None or btc_wallets):
             before = max_event_id()
             count = 0
-            for wallet in wallets:
-                holdings = read_holdings(base_rpc, "base", wallet, block=base_pin)
-                count += record_holdings(conn, wallet, "base", holdings, ts)
+            if base_rpc is not None:
+                for wallet in wallets:
+                    holdings = read_holdings(base_rpc, "base", wallet, block=base_pin)
+                    count += record_holdings(conn, wallet, "base", holdings, ts)
+            if btc_wallets:
+                btc = BtcClient(
+                    conn,
+                    settings=settings,
+                    clients=[_http_client_factory(peer) for peer in settings.btc_esplora_peers],
+                )
+                for wallet in btc_wallets:
+                    btc.record(wallet, btc.get_address(wallet), ts)
+                    count += 1
             _derive_lifecycle_since(conn, before)
-            conn.execute(
-                "INSERT INTO snapshots (ts, chain, block_number, kind)"
-                " VALUES (?, 'base', ?, 'holdings')",
-                (ts, base_pin),
-            )
+            if base_rpc is not None:
+                conn.execute(
+                    "INSERT INTO snapshots (ts, chain, block_number, kind)"
+                    " VALUES (?, 'base', ?, 'holdings')",
+                    (ts, base_pin),
+                )
+            if btc_wallets:
+                # Off-chain-pinned source: carries its timestamp, no block (§2).
+                conn.execute(
+                    "INSERT INTO snapshots (ts, chain, block_number, kind)"
+                    " VALUES (?, 'bitcoin', NULL, 'holdings')",
+                    (ts,),
+                )
             recorded["holdings"] = count
     except (ChainRpcError, TransportError, QuotaError) as exc:
         _emit({"error": str(exc)}, as_json=as_json)
         return EXIT_FAILURE
     finally:
         conn.close()
-    _emit({"ts": ts, "wallets": wallets, "recorded": recorded}, as_json=as_json)
+    _emit(
+        {"ts": ts, "wallets": wallets + btc_wallets, "recorded": recorded},
+        as_json=as_json,
+    )
     return EXIT_OK
 
 
