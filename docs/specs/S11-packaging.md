@@ -67,9 +67,12 @@ image: `docker compose run --rm scheduler healthcheck --json`.
   `ts TIMESTAMPTZ` (ISO-8601 strings insert cleanly); emits hypertable
   conversion DDL for the append-only time-series tables
   `api_call_log`, `pool_metrics`, `ohlcv` — for those, the surrogate
-  `id` PK is REPLACED (hypertable rule: unique indexes must include
-  `ts`): api_call_log keeps no PK (append-only log, index stays),
-  pool_metrics/ohlcv get their existing UNIQUE(ts,…) keys as PK.
+  `id` PK is DROPPED (hypertable rule: unique indexes must include the
+  partition column, which a lone id PK cannot). CORRECTED from build
+  evidence: pool_metrics has no UNIQUE constraint at all (only a
+  non-unique index — the original "existing UNIQUE keys as PK" wording
+  assumed one); implementation drops id everywhere and keeps whatever
+  UNIQUE constraints exist (ohlcv's includes `ts_start` — allowed).
   Referenced tables (`snapshots`, `position_events`, …) stay regular —
   their `id` is a foreign-key target, which hypertables can't be.
 - `scripts/pg_rehearsal.py` (network/db, out of gate): applies the

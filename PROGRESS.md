@@ -421,7 +421,7 @@
   focused test — drilled for real in test_integration.py); RUNBOOK placeholder
   commands normalized to parseable examples (the new doc-integrity gate at work)
 
-### S11 — Cloud packaging — `in-progress`
+### S11 — Cloud packaging — `complete`
 - Attempts: 1
 - Branch: `section/s11-packaging` | Merge commit: — | Tag: —
 - Reference docs read: ENGINEERING_STANDARDS §6 (one artifact, compose parity,
@@ -459,3 +459,15 @@
   snapshot of the real wallet + healthcheck healthy INSIDE the container
   with env-backend secrets; compose config validates; make release ->
   wheel + sdist + CycloneDX 1.6 SBOM (27 runtime components)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 8d8fb04, make test
+  PASS (338 passed, 4 live deselected; coverage 94.79%), make audit PASS; container
+  parity re-verified independently (image rebuilt; final image ships the STOCK CA
+  bundle — 142 certs, identical to stock base, proxy CA not shipped; live in-container
+  snapshot of the real wallet + healthcheck healthy:true with env-backend secrets);
+  compose validates AND refuses to start without the topic env; Timescale rehearsal
+  re-run PASS vs fresh timescaledb 2.17.2-pg16 (matches committed probe report); SBOM
+  CycloneDX 1.6 with runtime deps only (no pytest/ruff/mypy). Deviations honestly
+  noted by verifier and corrected in spec: pool_metrics had no UNIQUE key (spec
+  wording fixed); only alerts cadence is env-configurable (snapshot/backup fixed).
+- Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
+- Completed: 2026-08-02
