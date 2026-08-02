@@ -148,6 +148,22 @@ dexpaprika lp snapshot [--address 0x...] [--record] --json
   but NOT valued — extend the registry rather than trusting a guess.
 - A sickle whose `owner()` isn't the wallet is EXCLUDED (warning says so).
 
+## Portfolio snapshot & report (S6)
+
+```
+dexpaprika snapshot [--kind lp|hedge|defi|holdings|all] [--address 0x...] --json
+dexpaprika report --json
+```
+
+- `snapshot` is THE hourly job: records every group, derives lifecycle
+  events (open/modify/full_close), reconciles closures, one pinned block
+  per chain. Safe to re-run — observations append, nothing duplicates.
+- `report` is the agent's portfolio read: three groups (lp_hedge / defi /
+  holdings) with as_of + source per entry, lp_value + defi_net totals.
+- A GMX `full_close` event appearing = the short is GONE (SL fired or
+  closed) — this is the alertable state S8 watches.
+- Holdings show amounts only (pricing joins in S7/S8).
+
 ## Gates (build sessions)
 
 ```

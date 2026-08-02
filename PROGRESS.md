@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S6 — portfolio analysis & recording — `in_progress` (started 2026-08-02; S5.5 deferred, blocked on addresses)
+- Current section: S6 complete — next: S7 hedge coverage engine (school-reconciled); S5.5 still blocked on addresses
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s5-complete | main tip at last update: the s5 merge commit (see `git log`)
+- Last completed tag: s6-complete | main tip at last update: the s6 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -297,7 +297,7 @@
   be read as superseded by the formula-derived values.
 - Completed: 2026-08-02
 
-### S6 — Portfolio analysis & recording — `in_progress`
+### S6 — Portfolio analysis & recording — `complete`
 - Attempts: 1
 - Branch: `section/s6-portfolio` | Merge commit: — | Tag: —
 - Reference docs read: defi-portfolio best practices §2-3 (event lifecycle adopted);
@@ -309,8 +309,14 @@
 - Design notes / decisions: lifecycle events derived from successive observed states
   (open/modify/full_close), S3-S5 record functions untouched; holdings pricing joins
   in S7/S8 (amounts only in S6)
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Test summary (written before code): 16 tests — Aave exact Decimals, holdings with
+  zero-skip, lifecycle derivation incl. event-replay property, orchestrator
+  idempotence (opened exactly once across two runs), report shape
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 626dce5, make test
+  PASS (240 passed; "Required test coverage of 80% reached. Total coverage: 94.89%"),
+  make audit PASS; LIVE SMOKE: full portfolio snapshot (lp 1 / hedge 1 / defi 2 /
+  holdings 4) + report with totals lp_value $16,740.76 / defi_net $7,759.28
+- Coverage: 94.89% total; aave 100%, holdings 96%, lifecycle 90% | all static clean
+- Test-change justifications: feat commit 626dce5 — AERO expectation corrected (raw
+  at 18 decimals is dust; original test misread probe raw as whole tokens)
+- Completed: 2026-08-02
