@@ -471,3 +471,22 @@
   wording fixed); only alerts cadence is env-configurable (snapshot/backup fixed).
 - Coverage: 94.79% total; pgdialect 100%, scheduler 100% | all static clean
 - Completed: 2026-08-02
+
+### S5.5 — BTC holdings client (BTC-only) — `in-progress`
+- Attempts: 1
+- Branch: `section/s55-btc` | Merge commit: — | Tag: —
+- Scope: Richard provided BTC address bc1qwku...7ff (validated bech32 P2WPKH)
+  and chose BTC-only now; Solana deferred to a follow-up section when he
+  provides that address
+- Reference docs read: bitcoin--integration-guide.md (Esplora primary +
+  mempool.space fallback, balance = funded - spent sats, native-BTC-first
+  recommendation; no bitcoin lib needed for balance reads)
+- Probe evidence (Step 2b): probes/out/s55/address_stats.json — LIVE both
+  peers, real wallet: 131,828 sats confirmed (0.00131828 BTC), 2 txs, zero
+  pending; peers byte-identical
+- Design notes / decisions: peer-ring BtcClient (GMX failover pattern), two
+  quota providers (blockstream 60/min + 500k monthly, mempool 30/min
+  conservative); holdings-group integration through the same lifecycle
+  pipeline; snapshots row chain='bitcoin' block NULL (off-chain source per
+  §2); healthcheck reachability unchanged (documented)
+- Spec: docs/specs/S5.5-btc.md

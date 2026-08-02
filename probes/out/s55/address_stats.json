@@ -1,0 +1,43 @@
+{
+  "address": "bc1qwkuxaap3h4vklr3x5gncm2at9zak7qvnvdh7ff",
+  "blockstream": {
+    "status": 200,
+    "payload": {
+      "address": "bc1qwkuxaap3h4vklr3x5gncm2at9zak7qvnvdh7ff",
+      "chain_stats": {
+        "funded_txo_count": 2,
+        "funded_txo_sum": 131828,
+        "spent_txo_count": 0,
+        "spent_txo_sum": 0,
+        "tx_count": 2
+      },
+      "mempool_stats": {
+        "funded_txo_count": 0,
+        "funded_txo_sum": 0,
+        "spent_txo_count": 0,
+        "spent_txo_sum": 0,
+        "tx_count": 0
+      }
+    }
+  },
+  "mempool": {
+    "status": 200,
+    "payload": {
+      "address": "bc1qwkuxaap3h4vklr3x5gncm2at9zak7qvnvdh7ff",
+      "chain_stats": {
+        "funded_txo_count": 2,
+        "funded_txo_sum": 131828,
+        "spent_txo_count": 0,
+        "spent_txo_sum": 0,
+        "tx_count": 2
+      },
+      "mempool_stats": {
+        "funded_txo_count": 0,
+        "funded_txo_sum": 0,
+        "spent_txo_count": 0,
+        "spent_txo_sum": 0,
+        "tx_count": 0
+      }
+    }
+  }
+}
