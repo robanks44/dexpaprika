@@ -7,7 +7,7 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S2.5 complete — next: S3 DexPaprika client
+- Current section: S3 — DexPaprika client — `in_progress` (started 2026-08-02)
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
@@ -192,3 +192,21 @@
   config_json) — Hyperliquid's 1200/min is WEIGHT, not calls; a call-count window
   would under-throttle it, and a credits-window would break CoinStats. Both now
   first-class.
+
+### S3 — DexPaprika client — `in_progress`
+- Attempts: 1
+- Branch: `section/s3-dexpaprika-client` | Merge commit: — | Tag: —
+- Reference docs read: dex-docs/QUICK-REFERENCE.md (endpoint shapes, intervals, limits —
+  matched live probe); REFERENCE_INDEX §3 + §0 skew rule re-read
+- Probe evidence (Step 2b): probes/out/s3/{networks,pool_details,ohlcv_24h,transactions}
+  .json — all 200 live 2026-08-02; fee STILL null for SlipStream pool; OHLCV shape
+  time_open/.../volume with JSON floats → transport parses parse_float=Decimal;
+  pool 24h window keys confirmed
+- Design notes / decisions: shared HttpTransport (quota+retry+breaker+Decimal parse)
+  reused by S4+; DexPaprika price NEVER exposed as hedge-math price (role boundary);
+  ohlcv upsert idempotent; 0002_market_data migration
+- Test summary (written before code): —
+- Verifier verdict: —
+- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
+- Test-change justifications: none
+- Completed: —
