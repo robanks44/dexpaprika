@@ -7,13 +7,13 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S1 — config, secrets & wallet registry — `in_progress` (started 2026-08-02)
+- Current section: S1 complete — next: S2 storage & migrations
 - Last updated: 2026-08-02
 - Blockers: none (open items below are not blockers for S1–S5)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s0-complete | main tip at last update: the tagged commit (see `git log`)
+- Last completed tag: s1-complete | main tip at last update: the s1 merge commit (see `git log`)
 - Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
   waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
 
@@ -109,7 +109,7 @@
   a zip snapshot is delivered to Richard's project folder at setup handoff | .git object
   trees don't transfer cleanly file-by-file over the device bridge | committing .git piecemeal
 
-### S1 — Config, secrets & wallet registry — `in_progress`
+### S1 — Config, secrets & wallet registry — `complete`
 - Attempts: 1
 - Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
 - Reference docs read: python-keyring--setup--windows.md (service naming, env-fallback
@@ -121,9 +121,20 @@
 - Probe evidence (Step 2b): N/A — S1 reads no external API/on-chain source. Address
   validation pinned by published vectors (EIP-55, BIP-173/350, genesis addr, Solana
   program ids) + Richard's live wallet address. Rationale in docs/specs/S1.
-- Design notes / decisions: —
-- Test summary (written before code): —
-- Verifier verdict: —
-- Coverage: — | ruff: — | mypy: — | bandit/pip-audit: —
-- Test-change justifications: none
-- Completed: —
+- Design notes / decisions: vendored vector-pinned keccak-256 (no crypto dep for one
+  hash); registry persisted as JSON doc in S1, S2 may migrate backend behind same API;
+  argparse retained (framework re-decision logged:零 runtime dep still preferable);
+  BTC validation mainnet-only, witness v0+v1; secret-backend dispatch table (bandit-clean)
+- Test summary (written before code): 89 tests — keccak vectors, EIP-55/BIP-173/350
+  vectors, registry lifecycle/corruption, Settings env-first + Decimal, provider chain
+  + leak tests, CLI e2e; error-path additions post-implementation (justified commit)
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 012115d,
+  uv sync --frozen, make test PASS (89 passed; "Required test coverage of 80%
+  reached. Total coverage: 94.04%"), make audit PASS, CLI sanity runs verified,
+  healthcheck exit 3 degraded-by-design confirmed, no secret leakage
+- Coverage: 94.04% total; core: validation 93%, registry 94% | ruff: clean |
+  mypy --strict: clean | bandit: clean | pip-audit: clean (local-package skip)
+- Test-change justifications: see commit 012115d message (S0 healthcheck contract
+  updated for S1's two implemented checks; unreachable float assert removed;
+  error-path tests added for core-coverage gate)
+- Completed: 2026-08-02
