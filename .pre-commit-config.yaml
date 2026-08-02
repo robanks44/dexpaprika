@@ -11,7 +11,9 @@ repos:
     hooks:
       - id: ruff
         args: ["--fix"]
+        exclude: ^probes/   # throwaway probe scripts are evidence, not app code
       - id: ruff-format
+        exclude: ^probes/
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
