@@ -59,7 +59,7 @@ $env:DEXPAPRIKA_SECRET_BACKEND = "env"
 $env:DEXPAPRIKA_SECRET_GMX_SUBACCOUNT_KEY = "<subaccount private key>"
 $env:DEXPAPRIKA_GMX_CHAIN_ID = "421614"
 $env:DEXPAPRIKA_EXECUTION_ACCOUNT = "<your wallet address>"
-$env:DEXPAPRIKA_SECRET_NTFY_TOPIC = "uig-rcarr-9f1c7f8b"
+$env:DEXPAPRIKA_SECRET_NTFY_TOPIC = "<your ntfy topic>"
 ```
 
 (The key lives only in this shell's memory — it's never written to disk or git.)
