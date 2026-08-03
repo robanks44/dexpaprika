@@ -54,7 +54,32 @@ const TYPES = {
     console.error("Missing subaccount_approval.json — see header for how to create it.");
     process.exit(2);
   }
-  const entry = JSON.parse(fs.readFileSync(file, "utf8"));
+  // Tolerant parse: DevTools may copy the value escaped (\" ) or double-encoded
+  // (a JSON string containing JSON). Try plain, then string-unwrap, then unescape.
+  const rawText = fs.readFileSync(file, "utf8").trim();
+  const tryParse = (s) => {
+    try {
+      return JSON.parse(s);
+    } catch (_e) {
+      return null;
+    }
+  };
+  let entry = tryParse(rawText);
+  if (entry && typeof entry === "string") entry = tryParse(entry); // double-encoded
+  if (!entry) {
+    let s = rawText;
+    if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1);
+    s = s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    entry = tryParse(s);
+  }
+  if (!entry || typeof entry !== "object") {
+    console.error(
+      "Could not parse subaccount_approval.json. First 80 chars:\n  " +
+        rawText.slice(0, 80) +
+        "\nPaste the raw value; the script handles escaping automatically."
+    );
+    process.exit(2);
+  }
   if (!ACCOUNT) {
     console.error("Set GMX_ACCOUNT to your main/test wallet address.");
     process.exit(2);
