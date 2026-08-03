@@ -16,6 +16,23 @@
 const { GmxApiSdk } = require("@gmx-io/sdk/v2");
 const { getEmptySubaccountApproval } = require("@gmx-io/sdk/utils/subaccount");
 
+// Apply the SAME current-router override the v5 executor uses, so this probe
+// reflects what the executor will actually sign. Set PROBE_NO_OVERRIDE=1 to see
+// the raw (stale) SDK behaviour instead.
+if (!process.env.PROBE_NO_OVERRIDE) {
+  try {
+    const cfg = require("@gmx-io/sdk/configs/contracts");
+    const cid = Number(process.env.GMX_CHAIN_ID || "42161");
+    const chainC = cfg.CONTRACTS && cfg.CONTRACTS[cid];
+    if (chainC && cid === 42161) {
+      chainC.SubaccountGelatoRelayRouter = "0x517602BaC704B72993997820981603f5E4901273";
+      chainC.GelatoRelayRouter = "0xa9090E2fd6cD8Ee397cF3106189A7E1CFAE6C59C";
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
 const ACCOUNT = process.env.GMX_ACCOUNT;
 const SUBACCOUNT = process.env.GMX_SUBACCOUNT;
 const CHAIN_ID = Number(process.env.GMX_CHAIN_ID || "42161");
