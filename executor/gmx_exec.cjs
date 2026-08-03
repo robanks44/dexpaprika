@@ -8,8 +8,10 @@
 
 const { GmxApiSdk, PrivateKeySigner } = require("@gmx-io/sdk/v2");
 
-const ACCOUNT = "0xC155A616e39D7B83E37e8FD9d2106E1BC056d7Fe";
-const CHAIN_ID = 42161;
+// Execution target (S9.5) — supplied by the Python runner. Defaults keep the
+// standalone read-only probe working on Arbitrum One mainnet.
+const ACCOUNT = process.env.GMX_ACCOUNT || "0xc155a616e39d7b83e37e8fd9d2106e1bc056d7fe";
+const CHAIN_ID = Number(process.env.GMX_CHAIN_ID || "42161");
 const E12 = 10n ** 12n; // ETH trigger scaling (VERIFIED_FINDINGS §2.1)
 const E30 = 10n ** 30n;
 

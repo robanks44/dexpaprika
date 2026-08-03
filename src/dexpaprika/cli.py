@@ -1032,7 +1032,13 @@ def _sidecar_runner(settings: Settings) -> Any:
         script = Path(__file__).resolve().parents[2] / "executor" / "gmx_exec.cjs"
         if not script.exists():
             return {"ok": False, "error": f"sidecar script missing at {script}"}
-        env = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")}
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+            # Execution target (S9.5) — mainnet by default, Sepolia for testnet.
+            "GMX_CHAIN_ID": str(settings.gmx_chain_id),
+            "GMX_ACCOUNT": settings.execution_account,
+        }
         for passthrough in (
             "HTTPS_PROXY",
             "HTTP_PROXY",
