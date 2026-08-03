@@ -146,16 +146,18 @@ async function signWithCurrentAllowlist(prepared, signer, chainId, accountAddres
 async function submit(sdk, action, params, idempotencyKey) {
   const keyHex = process.env.GMX_SUBACCOUNT_KEY;
   if (!keyHex) return { ok: false, error: "GMX_SUBACCOUNT_KEY not provided" };
-  // Subaccount-only signing path (no main key). Faithful to the SDK's internal
-  // subaccount flow (build/cjs .../subaccount/sdkClient.js + the v2 subaccount
-  // test spec): the prepare request carries subaccountAddress + the empty
-  // approval; the SUBACCOUNT key signs, validated against the MAIN account
-  // address; the empty approval (signature "0x") rides in the submit eip712Data
-  // — the real authorization is the on-chain subaccount (active, so empty
-  // approval is what GMX itself sends for an active subaccount).
-  const { getEmptySubaccountApproval } = require("@gmx-io/sdk/utils/subaccount");
+  // Subaccount-only signing path (no main key): the prepare request carries just
+  // subaccountAddress (NO approval — see below); the SUBACCOUNT key signs, and the
+  // signature is validated against the MAIN account address. The real
+  // authorization is the already-active on-chain subaccount, which GMX's relay
+  // reads directly.
   const sub = new PrivateKeySigner(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
-  const approval = getEmptySubaccountApproval(CHAIN_ID, sub.address);
+  // Active on-chain subaccount: send NO subaccountApproval. The SDK omits it when
+  // the subaccount is already usable on-chain (sdkClient.js: approval=undefined ->
+  // not included in prepare or submit); GMX's relay reads the on-chain
+  // authorization. getEmptySubaccountApproval is a gas-estimation stub only —
+  // submitting it (shouldAdd:true, zero count/expiry, sig "0x") makes the router
+  // try to RE-REGISTER the subaccount and reverts on simulation.
 
   let preparedResult;
   if (action === "set-sl-trigger") {
@@ -165,7 +167,6 @@ async function submit(sdk, action, params, idempotencyKey) {
       mode: "express",
       from: ACCOUNT,
       subaccountAddress: sub.address,
-      subaccountApproval: approval,
     });
   } else if (action === "cancel-order") {
     preparedResult = await sdk.prepareCancelOrder({
@@ -173,7 +174,6 @@ async function submit(sdk, action, params, idempotencyKey) {
       mode: "express",
       from: ACCOUNT,
       subaccountAddress: sub.address,
-      subaccountApproval: approval,
     });
   } else {
     return { ok: false, error: `submit not enabled for ${action}` };
@@ -195,7 +195,6 @@ async function submit(sdk, action, params, idempotencyKey) {
     eip712Data: {
       batchParams: preparedResult.payload.batchParams,
       relayParams: preparedResult.payload.relayParams,
-      subaccountApproval: approval,
     },
   };
   if (preparedResult.idempotencyKey) submitReq.idempotencyKey = preparedResult.idempotencyKey;
