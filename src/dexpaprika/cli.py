@@ -1032,22 +1032,15 @@ def _sidecar_runner(settings: Settings) -> Any:
         script = Path(__file__).resolve().parents[2] / "executor" / "gmx_exec.cjs"
         if not script.exists():
             return {"ok": False, "error": f"sidecar script missing at {script}"}
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": os.environ.get("HOME", ""),
-            # Execution target (S9.5) — mainnet by default, Sepolia for testnet.
-            "GMX_CHAIN_ID": str(settings.gmx_chain_id),
-            "GMX_ACCOUNT": settings.execution_account,
-        }
-        for passthrough in (
-            "HTTPS_PROXY",
-            "HTTP_PROXY",
-            "NO_PROXY",
-            "SSL_CERT_FILE",
-            "NODE_EXTRA_CA_CERTS",
-        ):
-            if os.environ.get(passthrough):
-                env[passthrough] = os.environ[passthrough]
+        # Inherit the parent environment — Node's CSPRNG aborts at startup on
+        # Windows without SystemRoot (and proxy/CA vars must survive too). Strip
+        # every dexpaprika secret so the sidecar only ever sees a key we hand it
+        # explicitly for submit mode.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DEXPAPRIKA_SECRET_")}
+        # Execution target (S9.5) — mainnet by default, Sepolia for testnet.
+        env["GMX_CHAIN_ID"] = str(settings.gmx_chain_id)
+        env["GMX_ACCOUNT"] = settings.execution_account
+        env.pop("GMX_SUBACCOUNT_KEY", None)  # never inherited; only added below
         if payload.get("mode") == "submit":
             key = resolve_provider(settings).get("gmx_subaccount_key")
             if key is None:

@@ -72,6 +72,16 @@ class TestSidecarEnv:
         monkeypatch.setenv("DEXPAPRIKA_SECRET_GMX_SUBACCOUNT_KEY", "0xdeadbeef")
         env = self._capture_env(monkeypatch, Settings.load())
         assert "GMX_SUBACCOUNT_KEY" not in env  # only submit mode gets it
+        # No dexpaprika secret is ever visible to the sidecar.
+        assert not any(k.startswith("DEXPAPRIKA_SECRET_") for k in env)
+
+    def test_os_critical_env_inherited(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Parent env is inherited so Node's CSPRNG can start (Windows SystemRoot)."""
+        monkeypatch.setenv("SystemRoot", r"C:\Windows")
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy:8080")
+        env = self._capture_env(monkeypatch, Settings.load())
+        assert env["SystemRoot"] == r"C:\Windows"
+        assert env["HTTPS_PROXY"] == "http://proxy:8080"
 
 
 class TestSidecarScript:
