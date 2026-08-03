@@ -54,9 +54,22 @@ const TYPES = {
     console.error("Missing subaccount_approval.json — see header for how to create it.");
     process.exit(2);
   }
-  // Tolerant parse: DevTools may copy the value escaped (\" ) or double-encoded
-  // (a JSON string containing JSON). Try plain, then string-unwrap, then unescape.
-  const rawText = fs.readFileSync(file, "utf8").trim();
+  // Encoding-robust read: Notepad often saves UTF-16 (LE/BE) with a BOM, which
+  // reads as blank/null-laced under UTF-8. Detect and decode accordingly.
+  const buf = fs.readFileSync(file);
+  let encoding = "utf8";
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) encoding = "utf16le";
+  else if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) encoding = "utf16be";
+  else if (buf.length >= 2 && buf[0] !== 0 && buf[1] === 0) encoding = "utf16le"; // no BOM
+  let rawText;
+  if (encoding === "utf16be") {
+    const swapped = Buffer.from(buf);
+    swapped.swap16();
+    rawText = swapped.toString("utf16le");
+  } else {
+    rawText = buf.toString(encoding);
+  }
+  rawText = rawText.replace(/^﻿/, "").trim();
   const tryParse = (s) => {
     try {
       return JSON.parse(s);
@@ -73,10 +86,15 @@ const TYPES = {
     entry = tryParse(s);
   }
   if (!entry || typeof entry !== "object") {
+    // Safe diagnostics only — never prints your data.
+    const first = rawText.charCodeAt(0);
     console.error(
-      "Could not parse subaccount_approval.json. First 80 chars:\n  " +
-        rawText.slice(0, 80) +
-        "\nPaste the raw value; the script handles escaping automatically."
+      "Could not parse subaccount_approval.json (no content shown for privacy).\n" +
+        `  file bytes: ${buf.length}, decoded as: ${encoding}, decoded length: ${rawText.length}\n` +
+        `  starts with '{': ${rawText.startsWith("{")}, wrapped in quotes: ${rawText.startsWith('"')}\n` +
+        `  contains escaped quotes (\\"): ${rawText.includes('\\"')}, first charCode: ${first}\n` +
+        "  Tip: re-save the file as UTF-8 (Notepad: Save As -> Encoding: UTF-8), or\n" +
+        "  paste the value into a fresh file. The script auto-handles escaping."
     );
     process.exit(2);
   }
