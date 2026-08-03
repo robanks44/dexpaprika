@@ -1,15 +1,15 @@
 # S9 mainnet SL-nudge — supervised live rehearsal (your Windows machine)
 
-Goal: prove the live execute path end-to-end on your real GMX short, with the
-safest possible action — move the stop-loss trigger **$1,925 → $1,926 → back
-to $1,925**. It never opens, closes, or resizes a position; it's fully
-reversible; and you approve the exact numbers on your phone before anything
-fires.
+Goal: prove the live execute path end-to-end on a FRESH tiny test short you
+open yourself, with the safest possible action — move that order's stop-loss
+trigger up $1 and back. It never opens, closes, or resizes a position; it's
+fully reversible; and you approve the exact numbers on your phone first.
 
-Your real order: `0xc7c11d5c6267283c0605352adb0daefa0593f5c7707a534d71646ce8ea2ce642`
-(ETH short, SL trigger $1,925). Chain/account default to Arbitrum One + your
-wallet — no chain env needed. The subaccount key stays in your PowerShell env
-only; paste me each JSON output (no key in it) and I check it before you go on.
+We target the test order by its EXACT key (`--key`), never auto-detect —
+because your wallet also has an unrelated existing $1,925 SL order and we must
+not touch it. Chain/account default to Arbitrum One + your wallet. The
+subaccount key stays in your PowerShell env only; paste me each JSON output
+(no key in it) and I check it before you go on.
 
 ---
 
@@ -27,23 +27,32 @@ uv run dexpaprika --version
 Paste me the `--version` line (and any errors). We don't continue until the
 CLI runs.
 
-## Step 1 — Mainnet DRY-RUN (sends nothing, no key yet)
+## Step 1 — Open a tiny test short + stop-loss on GMX
+
+- On app.gmx.io (Arbitrum One, Rabby connected), open the SMALLEST ETH short
+  GMX allows (~$5 if permitted, else its minimum).
+- Add a **stop-loss** to it at any trigger above the mark — note the exact
+  trigger price you set; call it `SL`.
+- Tell me the `SL` price. I read your wallet live and give you back the exact
+  **order key** for THIS new order (distinguished from the $1,925 one by its
+  trigger). Call it `KEY`.
+
+## Step 2 — Mainnet DRY-RUN on the test order (sends nothing, no key yet)
 
 ```
 $env:DEXPAPRIKA_SECRET_BACKEND = "env"
 $env:DEXPAPRIKA_SECRET_NTFY_TOPIC = "<your ntfy topic>"
 uv run dexpaprika db migrate --json
 uv run dexpaprika execute status --json
-uv run dexpaprika execute set-sl-trigger --price 1926 --json
+uv run dexpaprika execute set-sl-trigger --key <KEY> --price <SL+1> --json
 ```
 
 - `execute status`: armed false, kill_switch false, limits shown.
-- `set-sl-trigger` (no `--arm`): DRY-RUN — it should resolve your real SL order
-  `0xc7c1…e642` and print the plan (new trigger 1926, request id), send
-  NOTHING. Paste me the JSON; I confirm the order key + trigger scaling before
-  we ever touch the subaccount.
+- `set-sl-trigger` (no `--arm`): DRY-RUN — it prints the plan (new trigger
+  SL+1, request id) for YOUR test order and sends NOTHING. Paste me the JSON;
+  I confirm the key + trigger scaling before we touch the subaccount.
 
-## Step 2 — Enable One-Click Trading (Rabby) + get the subaccount key
+## Step 3 — Enable One-Click Trading (Rabby) + get the subaccount key
 
 - Connect **Rabby** to app.gmx.io (Arbitrum One).
 - Account menu → enable **One-Click Trading**. Set a **tight action cap**
@@ -59,11 +68,11 @@ uv run dexpaprika execute set-sl-trigger --price 1926 --json
 $env:DEXPAPRIKA_SECRET_GMX_SUBACCOUNT_KEY = "<subaccount private key>"
 ```
 
-## Step 3 — The live nudge (armed, phone-approved)
+## Step 4 — The live nudge (armed, phone-approved)
 
 ```
 uv run dexpaprika execute arm --ttl-minutes 15 --json
-uv run dexpaprika execute set-sl-trigger --price 1926 --arm --json
+uv run dexpaprika execute set-sl-trigger --key <KEY> --price <SL+1> --arm --json
 ```
 
 - Your phone gets an **urgent ntfy** restating the action, order, and new
@@ -73,16 +82,18 @@ uv run dexpaprika execute set-sl-trigger --price 1926 --arm --json
   order, and verifies the trigger moved. Expected: `confirmed`.
 - Paste me the JSON at each step.
 
-## Step 4 — Nudge back + confirm
+## Step 5 — Nudge back + confirm
 
 ```
-uv run dexpaprika execute set-sl-trigger --price 1925 --arm --json
+uv run dexpaprika execute set-sl-trigger --key <KEY> --price <SL> --arm --json
 uv run dexpaprika execute status --json
 ```
 
-- Approve the return nudge the same way. SL back at $1,925.
+- Approve the return nudge the same way. Test order's SL back to `SL`.
 - We dump the `audit_log` rows to confirm the full chain
   (intent → simulation → submission → confirmation) for both nudges.
+- Optional cleanup: cancel the test order / close the tiny short in the GMX UI,
+  and disable One-Click Trading when done.
 
 ## What "good" looks like
 
