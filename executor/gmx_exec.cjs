@@ -12,8 +12,30 @@ const { GmxApiSdk, PrivateKeySigner } = require("@gmx-io/sdk/v2");
 // standalone read-only probe working on Arbitrum One mainnet.
 const ACCOUNT = process.env.GMX_ACCOUNT || "0xc155a616e39d7b83e37e8fd9d2106e1bc056d7fe";
 const CHAIN_ID = Number(process.env.GMX_CHAIN_ID || "42161");
+// Optional API host override (GMX runs two production peer regions per chain;
+// 1.6.4 only knows arbitrum.gmxapi.io). Unset -> SDK default (.io).
+const GMX_API_URL = process.env.GMX_API_URL || undefined;
 const E12 = 10n ** 12n; // ETH trigger scaling (VERIFIED_FINDINGS §2.1)
 const E30 = 10n ** 30n;
+
+// Current relay-router addresses (GMX docs, verified Aug 2026). 1.6.4's bundled
+// configs/contracts.js still has the deprecated addresses, which leak into any
+// client-side reference and the SDK's typed-data validator. Overwrite them in the
+// shared config object so every getContract() lookup resolves to the live router.
+const CURRENT_ROUTERS = {
+  42161: {
+    SubaccountGelatoRelayRouter: "0x517602BaC704B72993997820981603f5E4901273",
+    GelatoRelayRouter: "0xa9090E2fd6cD8Ee397cF3106189A7E1CFAE6C59C",
+  },
+};
+try {
+  const cfg = require("@gmx-io/sdk/configs/contracts");
+  const chainC = cfg.CONTRACTS && cfg.CONTRACTS[CHAIN_ID];
+  const upd = CURRENT_ROUTERS[CHAIN_ID];
+  if (chainC && upd) for (const [k, v] of Object.entries(upd)) chainC[k] = v;
+} catch (_e) {
+  /* config shape changed — validator/allowlist still guards signing */
+}
 
 function usdToTrigger1e30(priceStr) {
   // Decimal string dollars -> 1e30 fixed point (integer cents precision is enough
@@ -146,18 +168,16 @@ async function signWithCurrentAllowlist(prepared, signer, chainId, accountAddres
 async function submit(sdk, action, params, idempotencyKey) {
   const keyHex = process.env.GMX_SUBACCOUNT_KEY;
   if (!keyHex) return { ok: false, error: "GMX_SUBACCOUNT_KEY not provided" };
-  // Subaccount-only signing path (no main key): the prepare request carries just
-  // subaccountAddress (NO approval — see below); the SUBACCOUNT key signs, and the
-  // signature is validated against the MAIN account address. The real
-  // authorization is the already-active on-chain subaccount, which GMX's relay
-  // reads directly.
+  // Subaccount-only signing path (no main key): the prepare request carries the
+  // subaccountAddress + the SDK's standard "usable" approval object; the SUBACCOUNT
+  // key signs, validated against the MAIN account address. For an active on-chain
+  // subaccount the SDK sends exactly getEmptySubaccountApproval (verified:
+  // getUsableSubaccountApproval -> getEmptySubaccountApproval) — the on-chain
+  // authorization is what actually governs; this object just marks it a subaccount
+  // order so GMX validates signer=subaccount against account=main.
+  const { getEmptySubaccountApproval } = require("@gmx-io/sdk/utils/subaccount");
   const sub = new PrivateKeySigner(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
-  // Active on-chain subaccount: send NO subaccountApproval. The SDK omits it when
-  // the subaccount is already usable on-chain (sdkClient.js: approval=undefined ->
-  // not included in prepare or submit); GMX's relay reads the on-chain
-  // authorization. getEmptySubaccountApproval is a gas-estimation stub only —
-  // submitting it (shouldAdd:true, zero count/expiry, sig "0x") makes the router
-  // try to RE-REGISTER the subaccount and reverts on simulation.
+  const approval = getEmptySubaccountApproval(CHAIN_ID, sub.address);
 
   let preparedResult;
   if (action === "set-sl-trigger") {
@@ -167,6 +187,7 @@ async function submit(sdk, action, params, idempotencyKey) {
       mode: "express",
       from: ACCOUNT,
       subaccountAddress: sub.address,
+      subaccountApproval: approval,
     });
   } else if (action === "cancel-order") {
     preparedResult = await sdk.prepareCancelOrder({
@@ -174,6 +195,7 @@ async function submit(sdk, action, params, idempotencyKey) {
       mode: "express",
       from: ACCOUNT,
       subaccountAddress: sub.address,
+      subaccountApproval: approval,
     });
   } else {
     return { ok: false, error: `submit not enabled for ${action}` };
@@ -195,6 +217,7 @@ async function submit(sdk, action, params, idempotencyKey) {
     eip712Data: {
       batchParams: preparedResult.payload.batchParams,
       relayParams: preparedResult.payload.relayParams,
+      subaccountApproval: approval,
     },
   };
   if (preparedResult.idempotencyKey) submitReq.idempotencyKey = preparedResult.idempotencyKey;
@@ -225,7 +248,9 @@ async function submit(sdk, action, params, idempotencyKey) {
     process.stdout.write(JSON.stringify({ ok: false, error: `bad payload: ${e.message}` }));
     process.exit(0);
   }
-  const sdk = new GmxApiSdk({ chainId: CHAIN_ID });
+  const sdk = new GmxApiSdk(
+    GMX_API_URL ? { chainId: CHAIN_ID, apiUrl: GMX_API_URL } : { chainId: CHAIN_ID }
+  );
   try {
     let result;
     if (payload.mode === "read") result = await readOrders(sdk);
