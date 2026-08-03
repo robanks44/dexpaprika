@@ -39,3 +39,4 @@ htmlcov/
 .DS_Store
 Thumbs.db
 node_modules/
+subaccount_approval.json
