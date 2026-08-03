@@ -80,6 +80,69 @@ async function prepare(sdk, action, params) {
   return { ok: false, error: `unknown action ${action}` };
 }
 
+// Current GMX relay-router addresses (verified against @gmx-io/sdk 2.0.0-alpha-1).
+// GMX rotated these after 1.6.4 was published, so 1.6.4's bundled validator
+// rejects the live SubaccountGelatoRelayRouter domain that GMX's prepare API now
+// returns. We sign the domain GMX gives us, but keep the SDK's safety checks with
+// an up-to-date allowlist (both current + 1.6.4 addresses, for tolerance).
+const RELAY_ROUTERS = {
+  42161: [ // Arbitrum One
+    "0x517602BaC704B72993997820981603f5E4901273", // SubaccountGelatoRelayRouter (current)
+    "0xa9090E2fd6cD8Ee397cF3106189A7E1CFAE6C59C", // GelatoRelayRouter (current)
+    "0xfD0596f708d9D950E0eF7b5d191e5F8e55b8a67f", // SubaccountGelatoRelayRouter (1.6.4)
+    "0x5503b99308dB6923758F9A22d118207D633c4e87", // GelatoRelayRouter (1.6.4)
+  ],
+  421614: [ // Arbitrum Sepolia (current)
+    "0x43947140EEE26b82155baA18FDB746A05C700DCE",
+    "0xD2f52a70224d3453ea17944ABC12772793987FA6",
+  ],
+  43114: [ // Avalanche (current)
+    "0xfaBEb65bB877600be3A2C2a03aA56a95F9f845B9",
+    "0xEE2d3339CbcE7A42573C96ACc1298A79a5C996Df",
+  ],
+};
+
+// Sign the express typed-data GMX returned, replicating the SDK's
+// validateOrderTypedData (domain name/version/chainId + receiver anti-spoof) but
+// with a current relay-router allowlist instead of 1.6.4's stale hardcoded set.
+async function signWithCurrentAllowlist(prepared, signer, chainId, accountAddress) {
+  const { getAddress } = require("viem");
+  if (prepared.payloadType !== "typed-data") {
+    throw new Error(`cannot sign payloadType "${prepared.payloadType}"`);
+  }
+  const td = prepared.payload && prepared.payload.typedData;
+  if (!td) throw new Error("missing typedData in prepare response");
+  const { domain, types, message } = td;
+  if (domain.name !== "GmxBaseGelatoRelayRouter")
+    throw new Error(`unexpected EIP-712 domain name "${domain.name}"`);
+  if (String(domain.version) !== "1")
+    throw new Error(`unexpected EIP-712 domain version "${domain.version}"`);
+  if (Number(domain.chainId) !== chainId)
+    throw new Error(`EIP-712 chainId ${domain.chainId} != ${chainId}`);
+  const allow = new Set((RELAY_ROUTERS[chainId] || []).map((a) => getAddress(a)));
+  const vc = domain.verifyingContract ? getAddress(domain.verifyingContract) : undefined;
+  if (!vc || !allow.has(vc))
+    throw new Error(
+      `verifyingContract "${domain.verifyingContract}" not an allowed relay router for chain ${chainId}`
+    );
+  // Receiver anti-spoof: any order receiver must be the subaccount signer or the
+  // main account (mirrors the SDK). Best-effort across create/update param lists.
+  const allowed = new Set([getAddress(signer.address)]);
+  if (accountAddress) allowed.add(getAddress(accountAddress));
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  const lists = [message.createOrderParamsList, message.updateOrderParamsList].filter(Array.isArray);
+  for (const list of lists) {
+    for (const o of list) {
+      for (const field of ["receiver", "cancellationReceiver"]) {
+        const r = o && o.addresses && o.addresses[field];
+        if (r && getAddress(r) !== ZERO && !allowed.has(getAddress(r)))
+          throw new Error(`order ${field} "${r}" not the signer or account — refusing to sign`);
+      }
+    }
+  }
+  return signer.signTypedData(domain, types, message);
+}
+
 async function submit(sdk, action, params, idempotencyKey) {
   const keyHex = process.env.GMX_SUBACCOUNT_KEY;
   if (!keyHex) return { ok: false, error: "GMX_SUBACCOUNT_KEY not provided" };
@@ -91,7 +154,6 @@ async function submit(sdk, action, params, idempotencyKey) {
   // — the real authorization is the on-chain subaccount (active, so empty
   // approval is what GMX itself sends for an active subaccount).
   const { getEmptySubaccountApproval } = require("@gmx-io/sdk/utils/subaccount");
-  const { signPreparedOrder } = require("@gmx-io/sdk/utils/orderTransactions");
   const sub = new PrivateKeySigner(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
   const approval = getEmptySubaccountApproval(CHAIN_ID, sub.address);
 
@@ -118,19 +180,26 @@ async function submit(sdk, action, params, idempotencyKey) {
   }
 
   // SUBACCOUNT key signs; accountAddress = MAIN (SDK's signOrderWithSubaccount).
-  const signature = await signPreparedOrder(preparedResult, sub, CHAIN_ID, ACCOUNT);
-  const submitted = await sdk.submitOrder({
+  // Uses our current-allowlist signer because 1.6.4's validator rejects GMX's
+  // rotated relay router (see signWithCurrentAllowlist / RELAY_ROUTERS above).
+  const signature = await signWithCurrentAllowlist(preparedResult, sub, CHAIN_ID, ACCOUNT);
+  // Build the submit request exactly like the SDK's own subaccount path. Do NOT
+  // inject our internal audit idempotency_key — GMX's live submit schema no longer
+  // accepts an idempotencyKey field, so only forward one if GMX's prepare response
+  // actually returned it (mirrors executeExpressOrderWithSubaccount; else omitted).
+  const submitReq = {
     mode: preparedResult.mode,
     requestId: preparedResult.requestId,
     signature,
     from: ACCOUNT,
-    idempotencyKey: idempotencyKey ?? preparedResult.idempotencyKey,
     eip712Data: {
       batchParams: preparedResult.payload.batchParams,
       relayParams: preparedResult.payload.relayParams,
       subaccountApproval: approval,
     },
-  });
+  };
+  if (preparedResult.idempotencyKey) submitReq.idempotencyKey = preparedResult.idempotencyKey;
+  const submitted = await sdk.submitOrder(submitReq);
 
   // Poll relay status to a terminal state (bounded).
   let status = await sdk.fetchOrderStatus({ requestId: preparedResult.requestId });
