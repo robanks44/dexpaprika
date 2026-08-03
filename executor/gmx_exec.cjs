@@ -83,7 +83,17 @@ async function prepare(sdk, action, params) {
 async function submit(sdk, action, params, idempotencyKey) {
   const keyHex = process.env.GMX_SUBACCOUNT_KEY;
   if (!keyHex) return { ok: false, error: "GMX_SUBACCOUNT_KEY not provided" };
-  const signer = new PrivateKeySigner(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
+  // Subaccount-only signing path (no main key). Faithful to the SDK's internal
+  // subaccount flow (build/cjs .../subaccount/sdkClient.js + the v2 subaccount
+  // test spec): the prepare request carries subaccountAddress + the empty
+  // approval; the SUBACCOUNT key signs, validated against the MAIN account
+  // address; the empty approval (signature "0x") rides in the submit eip712Data
+  // — the real authorization is the on-chain subaccount (active, so empty
+  // approval is what GMX itself sends for an active subaccount).
+  const { getEmptySubaccountApproval } = require("@gmx-io/sdk/utils/subaccount");
+  const { signPreparedOrder } = require("@gmx-io/sdk/utils/orderTransactions");
+  const sub = new PrivateKeySigner(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
+  const approval = getEmptySubaccountApproval(CHAIN_ID, sub.address);
 
   let preparedResult;
   if (action === "set-sl-trigger") {
@@ -92,18 +102,23 @@ async function submit(sdk, action, params, idempotencyKey) {
       newTriggerPrice: usdToTrigger1e30(params.trigger_price),
       mode: "express",
       from: ACCOUNT,
+      subaccountAddress: sub.address,
+      subaccountApproval: approval,
     });
   } else if (action === "cancel-order") {
     preparedResult = await sdk.prepareCancelOrder({
       orderIds: [params.order_key],
       mode: "express",
       from: ACCOUNT,
+      subaccountAddress: sub.address,
+      subaccountApproval: approval,
     });
   } else {
     return { ok: false, error: `submit not enabled for ${action}` };
   }
 
-  const signature = await sdk.signOrder(preparedResult, signer);
+  // SUBACCOUNT key signs; accountAddress = MAIN (SDK's signOrderWithSubaccount).
+  const signature = await signPreparedOrder(preparedResult, sub, CHAIN_ID, ACCOUNT);
   const submitted = await sdk.submitOrder({
     mode: preparedResult.mode,
     requestId: preparedResult.requestId,
@@ -113,6 +128,7 @@ async function submit(sdk, action, params, idempotencyKey) {
     eip712Data: {
       batchParams: preparedResult.payload.batchParams,
       relayParams: preparedResult.payload.relayParams,
+      subaccountApproval: approval,
     },
   });
 
