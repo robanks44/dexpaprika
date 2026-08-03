@@ -586,7 +586,7 @@
   true mode (kill-switch tripped / ARMED / dry-run) + live exposure vs limits;
   verified live (dry-run -> ARMED after `execute arm`). Tests updated (388 passed).
 
-### S9.5 — Network-configurable executor (Arbitrum Sepolia testnet) — `in-progress`
+### S9.5 — Network-configurable executor (Arbitrum Sepolia testnet) — `complete`
 - Attempts: 1
 - Branch: `section/s95-testnet` | Merge commit: — | Tag: —
 - Richard's decision (2026-08-02): rehearse the live execute path on TESTNET
@@ -609,3 +609,15 @@
   chain/account
 - Deliverable: docs/TESTNET-REHEARSAL.md — Richard's supervised step-by-step
 - Spec: docs/specs/S9.5-testnet-harness.md
+- Verifier verdict: "VERDICT: PASS" — fresh agent, clean clone of 085884b, make test
+  PASS (394 passed; coverage 93.57%), make audit PASS; adversarial review confirmed
+  mainnet path UNCHANGED (no env -> 42161 + real account, real order key resolves,
+  response null), non-GMX chain rejected, no S9 safeguard weakened, key still
+  submit-only; LIVE testnet read smoke on chainId 421614 ok, CLI wires testnet
+  through cleanly (no submit, no ARMED/KILL files); rehearsal runbook commands match
+  build_parser
+- Coverage: 93.57% total; config 96% | all static clean
+- Completed (harness scope): 2026-08-02
+- PENDING WITH RICHARD: the supervised armed testnet nudge on his Windows machine
+  per docs/TESTNET-REHEARSAL.md (needs a testnet position, One-Click subaccount key,
+  faucet ETH — none creatable by the verifier)
