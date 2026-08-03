@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     arm_ttl_minutes: int = 30
     order_rate_limit_seconds: int = 60
     approval_timeout_minutes: int = 10
+    # Execution target (S9.5): where GMX orders go. Default Arbitrum One (mainnet);
+    # set 421614 for the Arbitrum Sepolia testnet rehearsal. GMX runs ONLY on these
+    # chains — Base is not a GMX venue (verified 2026-08), so it is rejected.
+    gmx_chain_id: int = 42161
+    execution_account: str = "0xC155A616e39D7B83E37e8FD9d2106E1BC056d7Fe"
 
     @field_validator(*_LIST_FIELDS, mode="before")
     @classmethod
@@ -124,6 +129,21 @@ class Settings(BaseSettings):
     def _require_https_url(cls, value: str) -> str:
         if not value.startswith("https://"):
             msg = f"URL {value!r} must use HTTPS (ENGINEERING_STANDARDS §2)"
+            raise ValueError(msg)
+        return value
+
+    # Chains GMX v2 deploys perpetuals + subaccounts + order routing on.
+    # Arbitrum One (42161) / Sepolia (421614), Avalanche C-Chain (43114).
+    _GMX_CHAIN_IDS: ClassVar[frozenset[int]] = frozenset({42161, 421614, 43114})
+
+    @field_validator("gmx_chain_id")
+    @classmethod
+    def _known_gmx_chain(cls, value: int) -> int:
+        if value not in cls._GMX_CHAIN_IDS:
+            msg = (
+                f"gmx_chain_id {value} is not a GMX venue — GMX runs on Arbitrum"
+                " (42161/421614) and Avalanche (43114) only; Base is not a GMX chain"
+            )
             raise ValueError(msg)
         return value
 

@@ -52,12 +52,13 @@ class TestSidecarEnv:
             captured["input"] = kwargs["input"]
             return FakeCompleted()
 
-        monkeypatch.setattr(cli.shutil, "which", lambda _n: "/usr/bin/node")
-        monkeypatch.setattr(cli.Path, "exists", lambda _self: True)
+        monkeypatch.setattr("shutil.which", lambda _n: "/usr/bin/node")
+        monkeypatch.setattr("pathlib.Path.exists", lambda _self: True)
         monkeypatch.setattr("subprocess.run", fake_run)
         runner = cli._sidecar_runner(settings)
         runner({"mode": "read", "action": "read-orders", "params": {}})
-        return captured["env"]
+        env: dict[str, str] = captured["env"]
+        return env
 
     def test_chain_and_account_passed_to_sidecar(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEXPAPRIKA_GMX_CHAIN_ID", str(ARBITRUM_SEPOLIA))

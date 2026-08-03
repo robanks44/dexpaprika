@@ -585,3 +585,27 @@
   "execution not built" post-S9 and ignored real armed/kill state. Now reports the
   true mode (kill-switch tripped / ARMED / dry-run) + live exposure vs limits;
   verified live (dry-run -> ARMED after `execute arm`). Tests updated (388 passed).
+
+### S9.5 — Network-configurable executor (Arbitrum Sepolia testnet) — `in-progress`
+- Attempts: 1
+- Branch: `section/s95-testnet` | Merge commit: — | Tag: —
+- Richard's decision (2026-08-02): rehearse the live execute path on TESTNET
+  first, off his Windows machine, One-Click-Trading setup, then promote to
+  cloud/mainnet. Chosen testnet corrected from Base Sepolia -> Arbitrum Sepolia
+  (GMX perps run only on Arbitrum/Avalanche; Base is not a GMX venue, verified
+  2026-08 via coinbureau + GMX docs)
+- Reference: official GMX SDK v2 (GmxApiSdk({chainId}) supports 421614); no new
+  upstream
+- Probe evidence (Step 2b): probes/out/s9/testnet_read.json — live read-only
+  fetchOrders on chainId 421614 returned ok (0 orders, expected), proving the
+  sidecar reaches the Arbitrum Sepolia deployment
+- Design notes: config gmx_chain_id (default 42161, validated against GMX venue
+  set {42161,421614,43114}) + execution_account; _sidecar_runner passes
+  GMX_CHAIN_ID+GMX_ACCOUNT to the sidecar (key still submit-only); sidecar reads
+  both from env with mainnet fallback. Gate chain/approval/audit unchanged.
+- Test summary (written before code): 6 tests — mainnet defaults, testnet env
+  overrides, non-GMX chain (Base 8453) rejected, chain+account passed to
+  sidecar env, key reaches submit-mode only, sidecar source has no hardcoded
+  chain/account
+- Deliverable: docs/TESTNET-REHEARSAL.md — Richard's supervised step-by-step
+- Spec: docs/specs/S9.5-testnet-harness.md
