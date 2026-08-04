@@ -84,6 +84,21 @@ question; treat it as the first thing S5 must resolve, and probe before coding.~
 > ($1,689–$2,063), pool tick −201069 (~$1,854) IN RANGE, 4.82 WETH + 7,809 USDC.
 > Evidence: `probes/out/s5/discovery.json` + `probes/out/s5/discovery_live_2026-08-04.json`.
 > Enumeration must go through the Sickle custodian, NOT wallet NFT ownership (still 0).
+>
+> **Identity + constraints (handoff `docs/SICKLE-CUSTODY-FINDINGS.md`, 2026-08-04;
+> library doc `CONTEXT\_inbox\vfat-sickle--integration-guide.md`):**
+> the custodian is Richard's **vfat.io Sickle** — per-user smart wallet, EIP-1167 proxy,
+> implementation `0xfff75d099baee29f447866bc5299cd67c04761c8`; `SickleFactory`
+> `0x71D234A3e1dfC161cc1d081E6496e76627baAc31` (in S5 code as `SICKLE_FACTORY`).
+> - **Re-ranging mints a NEW tokenId** — never pin #5056427; re-enumerate every cycle.
+>   `balanceOf(sickle)==0` means *widen the search*, not "position gone."
+> - **Gauge fallback:** vfat's NftFarmStrategy CAN stake the NFT into a CLGauge. Today it's
+>   held directly by the Sickle; if enumeration ever comes up empty, check gauge custody
+>   before concluding it's gone.
+> - **Execution constraint (matters for any LP-management scope, not the hedge itself):**
+>   moving/withdrawing the LP NFT goes through vfat strategy contracts (NftFarmStrategy
+>   `depositErc721`/`withdrawErc721`, SweepStrategy) as the Sickle owner — the EOA cannot
+>   `safeTransferFrom` the NFT out of the NFPM directly. **Reads are permissionless (no key).**
 
 **(b) Zerion requires the undocumented `sync=true` or it serves silently stale data.**
 Same endpoint, same wallet, seconds apart: cached returned **2 positions / $16,155**;
@@ -159,7 +174,10 @@ The core of this project. Read before ANY hedge-related section.
 - `reference\aerodrome-slipstream--integration-guide--gauges.md` — CLGauge custody recipe:
   Voter.gauges(pool) → stakedValues(depositor) → NFPM.positions(tokenId). **⚠ This is ONE
   custody path, not THE answer — see §0.1(a): Richard's live position #5056427 is held by an
-  EIP-1167 proxy on a second Slipstream deployment and this recipe returns nothing for it.**
+  EIP-1167 proxy on a second Slipstream deployment and this recipe returns nothing for it.
+  RESOLVED 2026-08-04: custodian = vfat Sickle (direct NFT hold); this gauge recipe is the
+  FALLBACK path only (vfat NftFarmStrategy can stake into a CLGauge) — check it only if
+  Sickle enumeration comes up empty. Live recipe: §0.1(a).**
 - `reference\concentrated-liquidity-math--summary.md` — NEW: tick/amount/delta/IL
   formulas the hedge-sizing sections implement (MUST read before delta math)
 - `reference\web3py--api-reference.md` + `reference\rpc-providers--api-reference--base-arbitrum.md`

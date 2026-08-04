@@ -209,6 +209,24 @@ Reconcile into ARCHITECTURE/SECTION_PLAN; tests-first + fresh-agent verification
 all); drive the web app via browser automation (its own One-Click is broken mid-migration);
 pause until GMX finishes migrating (indefinite; on-chain path works today).
 
+### 2026-08-04 — LP custody blocker resolved: custodian is Richard's vfat Sickle
+**Decision/finding:** the unidentified EIP-1167 custodian `0x6c1b2006…` (REFERENCE_INDEX
+§0.1a) is Richard's **vfat.io Sickle** (per-user smart wallet; impl
+`0xfff75d099baee29f447866bc5299cd67c04761c8`; `SickleFactory`
+`0x71D234A3e1dfC161cc1d081E6496e76627baAc31`). It holds the LP NFT directly. Confirmed
+by an independent 2026-08-04 strategy session (handoff `docs/SICKLE-CUSTODY-FINDINGS.md`)
+AND re-verified live in-repo via `dexpaprika lp snapshot` (block 49,524,786). S5's
+discovery already implements the correct recipe (SickleFactory.sickles → owner()-gate →
+multi-NFPM enumerate → positions()); the "SickleFactory address not captured" gap the
+handoff lists is already closed (`SICKLE_FACTORY` in `src/…/lp/discovery.py`).
+**Why it matters:** the **2026-08-03 delta-matched rebalance strategy (S14) is no longer
+data-blocked** — live range bounds/delta are readable; S12 derived metrics likewise.
+**Design constraints carried into code/notes (§0.1a):** re-ranging mints a new tokenId
+(re-enumerate, never pin); gauge fallback if enumeration empties; **LP-move execution
+(if ever in scope) must go through vfat NftFarmStrategy as Sickle owner — the EOA can't
+`safeTransferFrom` the NFT directly** (reads are permissionless).
+**Library:** new doc `CONTEXT\_inbox\vfat-sickle--integration-guide.md` (library loop files it).
+
 ### S1 — Config, secrets & wallet registry — `complete`
 - Attempts: 1
 - Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
