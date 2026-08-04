@@ -1020,7 +1020,7 @@ def _cmd_scheduler(args: argparse.Namespace, *, as_json: bool) -> int:
 def _sidecar_runner(settings: Settings) -> Any:
     """Production sidecar: the pinned Node executor as a one-shot subprocess.
 
-    The subaccount key env var is set ONLY for submit-mode payloads.
+    The execution wallet key env var is set ONLY for submit-mode payloads.
     """
     import shutil
     import subprocess  # nosec B404 — fixed argv, repo-pinned script, no shell
@@ -1029,7 +1029,11 @@ def _sidecar_runner(settings: Settings) -> Any:
         node = shutil.which("node")
         if node is None:
             return {"ok": False, "error": "node not found — the executor sidecar needs Node.js"}
-        script = Path(__file__).resolve().parents[2] / "executor" / "gmx_exec.cjs"
+        # On-chain (GmxSdk / Classic) executor: GMX exposes express/subaccount
+        # orders to its frontend only, so order changes go on-chain — the wallet
+        # signs and pays gas. Overridable via DEXPAPRIKA_SIDECAR_SCRIPT for tests.
+        script_name = os.environ.get("DEXPAPRIKA_SIDECAR_SCRIPT", "gmx_exec_onchain.cjs")
+        script = Path(__file__).resolve().parents[2] / "executor" / script_name
         if not script.exists():
             return {"ok": False, "error": f"sidecar script missing at {script}"}
         # Inherit the parent environment — Node's CSPRNG aborts at startup on
@@ -1040,18 +1044,23 @@ def _sidecar_runner(settings: Settings) -> Any:
         # Execution target (S9.5) — mainnet by default, Sepolia for testnet.
         env["GMX_CHAIN_ID"] = str(settings.gmx_chain_id)
         env["GMX_ACCOUNT"] = settings.execution_account
-        env.pop("GMX_SUBACCOUNT_KEY", None)  # never inherited; only added below
+        # Optional API/RPC overrides pass through if the operator set them.
+        for var in ("GMX_RPC_URL", "GMX_ORACLE_URL", "GMX_SUBSQUID_URL"):
+            if var in os.environ:
+                env[var] = os.environ[var]
+        env.pop("GMX_WALLET_KEY", None)  # never inherited; only added below
+        env.pop("GMX_SUBACCOUNT_KEY", None)
         if payload.get("mode") == "submit":
-            key = resolve_provider(settings).get("gmx_subaccount_key")
+            key = resolve_provider(settings).get("gmx_wallet_key")
             if key is None:
                 return {
                     "ok": False,
                     "error": (
-                        "secret 'gmx_subaccount_key' not resolvable — the supervised"
-                        " subaccount setup has not happened yet"
+                        "secret 'gmx_wallet_key' not resolvable — set"
+                        " DEXPAPRIKA_SECRET_GMX_WALLET_KEY to the execution wallet key"
                     ),
                 }
-            env["GMX_SUBACCOUNT_KEY"] = key
+            env["GMX_WALLET_KEY"] = key
         try:
             proc = subprocess.run(  # noqa: S603 # nosec B603 — fixed argv, no shell
                 [node, str(script)],
