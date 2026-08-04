@@ -870,6 +870,32 @@ def _cmd_watchdog(args: argparse.Namespace, *, as_json: bool) -> int:
         conn.close()
 
 
+def _cmd_strategy(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+
+    from dexpaprika.strategy import evaluate, run
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit({"error": "database missing — run `dexpaprika db migrate` first"}, as_json=as_json)
+        return EXIT_FAILURE
+    now = datetime.now(UTC)
+    conn = connect(path)
+    try:
+        if args.strategy_command == "status":
+            decision = evaluate(conn, settings, now=now)
+            _emit(decision.model_dump(mode="json"), as_json=as_json)
+            return EXIT_OK
+        # rebalance
+        sidecar = _sidecar_runner(settings)
+        outcome = run(conn, settings, now=now, arm=args.arm, sidecar=sidecar)
+    finally:
+        conn.close()
+    _emit(outcome.model_dump(mode="json"), as_json=as_json)
+    return EXIT_OK
+
+
 def _cmd_report(*, as_json: bool) -> int:
     from decimal import Decimal
 
@@ -1722,6 +1748,20 @@ def build_parser() -> argparse.ArgumentParser:
     w_st = watchdog_sub.add_parser("status", help="Heartbeat-url configured? + recorder freshness.")
     _add_json_flag(w_st)
 
+    strategy = subparsers.add_parser(
+        "strategy", help="Delta-band rebalance (shadow by default; auto-execute is opt-in)."
+    )
+    strategy_sub = strategy.add_subparsers(dest="strategy_command", required=True)
+    st_status = strategy_sub.add_parser("status", help="Delta gap + target + every gate state.")
+    _add_json_flag(st_status)
+    st_reb = strategy_sub.add_parser(
+        "rebalance", help="Evaluate + (only with --arm AND auto_rebalance_enabled) auto-execute."
+    )
+    st_reb.add_argument(
+        "--arm", action="store_true", help="Live mode (needs armed state + opt-in)."
+    )
+    _add_json_flag(st_reb)
+
     report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
     _add_json_flag(report)
 
@@ -1816,6 +1856,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_dashboard(args, as_json=args.as_json)
     if args.command == "watchdog":
         return _cmd_watchdog(args, as_json=args.as_json)
+    if args.command == "strategy":
+        return _cmd_strategy(args, as_json=args.as_json)
     if args.command == "report":
         return _cmd_report(as_json=args.as_json)
     if args.command == "hedge":

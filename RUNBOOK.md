@@ -265,6 +265,36 @@ dexpaprika watchdog status
 - The digest is a SUMMARY, not a re-fire of S8 alerts; S8 still fires actionable per-rule
   alerts. The watchdog adds the external liveness guard + the daily all-clear.
 
+## Delta-band rebalance strategy (S14 — auto-execute is OPT-IN)
+
+```
+dexpaprika strategy status                 # delta gap, target, every gate state (offline)
+dexpaprika strategy rebalance [--arm]       # evaluate + (only if enabled + armed) auto-execute
+```
+
+- **North star:** decisions optimize for the greatest NET CAPITAL position (penalize fee
+  churn, unhedged-delta losses, AND catastrophic failure). Resize the GMX short to track the
+  LP's live ETH exposure, triggered by delta DRIFT, not price.
+- **Ships DORMANT.** `auto_rebalance_enabled` defaults **False** → `strategy rebalance` is
+  SHADOW/propose only, no matter what else is set. Live auto-execution needs BOTH the config
+  flag on AND `--arm` (+ the S9 armed-state file). Capital-optimal rollout: **shadow → measure
+  → tune → enable** — let it journal decisions, tune the band/interval/cost-floor from
+  recorded data, THEN turn it on.
+- **No S9 guard bypassed.** Auto-execute reuses the S9 pipeline (`execute_instruction`) with an
+  auto-approving callback — kill-switch, armed-state, hard limits (max position, max daily
+  adjustments, max delta per run), audit, post-condition verify, idempotency ALL still fire.
+  A big gap is stepped in per-run-cap-sized increments (converges over cycles, never exceeds
+  the cap). Every executed rebalance sends an ntfy notification.
+- **Gates (all must pass to act):** band breached (`hedge_rebalance_band`, 7.5%), state fresh,
+  `rebalance_min_interval_minutes` (60) since the last executed rebalance, gap ≥
+  `rebalance_min_notional_usd` ($250 cost floor), under the daily/position caps. `strategy
+  status` shows each gate; blocked decisions list which gate stopped them.
+- **SL untouched** — the widened stop-loss stays as the backstop. Every decision (shadow +
+  executed) is journaled to `rebalance_log` for net-capital attribution.
+- **To enable live (when ready):** set `DEXPAPRIKA_AUTO_REBALANCE_ENABLED=true`, run
+  `dexpaprika execute arm`, and let the scheduled `strategy-rebalance` job (opt-in, interval
+  `strategy_rebalance_minutes`) run `strategy rebalance --arm`.
+
 ## Hedge analysis (S7 — read-only)
 
 ```
