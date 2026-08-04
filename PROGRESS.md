@@ -228,6 +228,21 @@ data-blocked** — live range bounds/delta are readable; S12 derived metrics lik
 `safeTransferFrom` the NFT directly** (reads are permissionless).
 **Library:** new doc `CONTEXT\_inbox\vfat-sickle--integration-guide.md` (library loop files it).
 
+### 2026-08-04 — Quota accounting stays INSIDE the per-source rollback (S12a) — accept known under-count on failure
+**Decision (Richard, 2026-08-04):** leave `QuotaTracker` writes inside each recorder source's
+`BEGIN…COMMIT`. When a source fails and rolls back, HTTP calls physically sent during that
+source are NOT counted toward the provider rate limit (the `api_call_log` rows roll back too).
+Keep it simple; do NOT move quota writes outside the rollback for now.
+**Why acceptable:** capped exponential backoff (max 300s) bounds failed-retry call volume, so
+the under-count can't run away; Base public RPC + GMX REST limits are generous.
+**Known risk (monitor):** under-counts real usage exactly when a source is failing/retrying —
+the moment most likely to trip a provider's real limit; DexPaprika's free tier is the tightest
+and the one where this could bite. Audit log also omits failed-cycle calls.
+**Revisit trigger:** recurring 429s / rate-bans during outages, or repeated failed-cycle
+retries against a tight provider. Lowest-risk fix if needed: record quota on the same
+connection right after `COMMIT`/`ROLLBACK` (no second writer). Flagged to Richard; he chose
+leave-as-is + monitor.
+
 ### S1 — Config, secrets & wallet registry — `complete`
 - Attempts: 1
 - Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
