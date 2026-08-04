@@ -1,16 +1,12 @@
 {
-  "name": "executor",
+  "name": "dexpaprika-executor",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
+  "private": true,
+  "description": "dexpaprika S9 hedge-order executor sidecar (on-chain GmxSdk / Classic). Dumb prepare/submit tool driven by the Python CLI; all safeguards live in the caller.",
   "license": "ISC",
   "dependencies": {
     "@gmx-io/sdk": "1.6.4",
-    "crypto-js": "4.2.0"
+    "crypto-js": "4.2.0",
+    "viem": "2.55.10"
   }
 }
