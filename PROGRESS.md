@@ -7,18 +7,18 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: **S12a in_progress** (branch `section/s12a-recorder`) — recorder service
-  + full-variable recording; spec at `docs/specs/S12a-recorder.md`. Core build S0–S11
-  complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED (2026-08-04);
-  S9.6 on-chain executor verified (fresh-agent PASS). Next: S12b dashboard, S13 watchdog,
-  S14 delta-band. **S5 range-bounds custody blocker RESOLVED (probe-verified live
-  2026-08-04)** — S12 metrics + S14 now unblocked. See SECTION_PLAN.
+- Current section: **S12a COMPLETE (tag `s12a-complete`)** — recorder service +
+  full-variable recording; fresh-agent verdict PASS (415 passed, 93.61% cov). Core build
+  S0–S11 complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED
+  (2026-08-04); S9.6 on-chain executor verified (fresh-agent PASS). Next: S12b dashboard,
+  S13 watchdog, S14 delta-band. **S5 range-bounds custody blocker RESOLVED (probe-verified
+  live 2026-08-04)** — S12 metrics + S14 now unblocked. See SECTION_PLAN.
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s9.6-complete | main tip: the s9.6 PROGRESS commit (see `git log`)
+- Last completed tag: s12a-complete | main tip: the S12a merge (see `git log`)
 - Remote configured: YES — private GitHub `robanks44/dexpaprika` (PAT in session
   credential store, outside the repo). main + tags pushed.
 
@@ -772,3 +772,33 @@ data-blocked** — live range bounds/delta are readable; S12 derived metrics lik
 - Not covered (by design): live on-chain network calls (RPC/oracle/GMX) — inherently
   non-offline; validated by the supervised live exercise, not the fresh-agent gate.
 - Completed: 2026-08-04 | Tag: `s9.6-complete`
+
+### S12a — Recorder service + full-variable recording — `complete`
+- Attempts: 1 (fresh-agent FAIL→fix→PASS on one defect)
+- Scope: turn the one-shot `snapshot` into (1) a reusable `run_cycle` and (2) a
+  long-running `RecorderService`, capturing the FULL raw variable set per source.
+  Spec: docs/specs/S12a-recorder.md. Probe gate: probes/out/s12a/ (live LP dump +
+  hedge schema-derived field gap analysis; live GMX REST was 400 that session).
+- Built: `dexpaprika.recorder.run_cycle` (per-source atomic BEGIN/COMMIT, heartbeat,
+  isolation) extracted from `snapshot` (snapshot KEEPS its fail-hard contract);
+  `RecorderService` (per-source cadence, injected clock/sleep, capped exponential
+  backoff, cooperative stop, honest staleness); CLI `recorder cycle|run|status`;
+  migration 0003_recorder (recorder_heartbeat, append-only, WAL-safe).
+- Full-variable additions: LP state gains token0_price_usd + token1_price_usd
+  (USDC stable-numeraire, null-with-reason for non-stable pairs) + pool_volume_usd_24h
+  (DexPaprika, null-with-reason, never fabricated); hedge state gains stop_loss_orders
+  (trigger + size). tokens_owed0/1 already covered unclaimed fees.
+- Tests (tests/test_recorder.py, 10, offline): run_cycle rows+heartbeat; per-source
+  isolation; LP + hedge full-variable field assertions; service cadence; backoff;
+  honest staleness (failure induced, last-good ts retained); run_cycle==service
+  equivalence; CLI cycle/run/status + status last-good-vs-last-attempt separation.
+- Fresh-agent gate: first pass FAILED on honest-staleness (failed source re-stamped
+  fresh, staleness reset to ~0 — spec §Behavioural-rules violation; the named test
+  never induced a failure). Fixed (service `_apply` keeps prev ts/block; CLI status
+  anchors staleness to last ok=1 heartbeat) + tests rewritten as real regression pins.
+  Re-verify VERDICT: PASS (empirically confirmed both tests fail against old behaviour).
+- Verifier verdict (fresh agent): **415 passed, 4 deselected**; coverage **93.61%**
+  (80% gate); ruff + mypy(strict) clean. **VERDICT: PASS.**
+- Not covered (by design): live network (RPC/GMX/DexPaprika) — offline mocked-client
+  tests only, per standards; S12b builds the read-time dashboard over this raw data.
+- Completed: 2026-08-04 | Tag: `s12a-complete`

@@ -1,6 +1,7 @@
 # S12a — Recorder service + full-variable recording (spec)
 
-**Status:** in_progress (branch `section/s12a-recorder`)
+**Status:** COMPLETE (tag `s12a-complete`) — fresh-agent verdict PASS (honest-staleness
+defect found + fixed on re-verify; 415 passed, 93.61% coverage).
 **Depends:** S3 (DexPaprika), S4 (GMX), S5 (LP discovery — RESOLVED), S6 (recording seam).
 **Decision basis:** PROGRESS decision log 2026-08-04 (full-variable DB + LIVE dashboard);
 ENGINEERING_STANDARDS §6 amendment (daemon = liveness; correctness stays CLI + scheduler).
