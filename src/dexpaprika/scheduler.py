@@ -46,7 +46,8 @@ class JobSpec:
 
 
 def job_specs(settings: Settings) -> list[JobSpec]:
-    """The three jobs: hourly recorder, minutes-scale monitor, daily backup."""
+    """Scheduled jobs: hourly snapshot, minutes-scale alerts monitor, daily backup,
+    external watchdog heartbeat (interval), and the daily all-clear digest (S13)."""
     return [
         JobSpec(id="snapshot", argv=["snapshot", "--json"], trigger="cron-hourly", minute=0),
         JobSpec(
@@ -61,6 +62,19 @@ def job_specs(settings: Settings) -> list[JobSpec]:
             trigger="cron-daily",
             hour=3,
             minute=10,
+        ),
+        JobSpec(
+            id="watchdog-heartbeat",
+            argv=["watchdog", "heartbeat", "--json"],
+            trigger="interval",
+            minutes=settings.watchdog_heartbeat_minutes,
+        ),
+        JobSpec(
+            id="watchdog-digest",
+            argv=["watchdog", "digest", "--json"],
+            trigger="cron-daily",
+            hour=settings.watchdog_digest_hour,
+            minute=0,
         ),
     ]
 

@@ -92,6 +92,16 @@ class Settings(BaseSettings):
     # Alerts-monitor cadence; snapshot stays hourly-on-the-hour, backup daily.
     scheduler_alerts_minutes: int = 5
 
+    # --- S13 external watchdog + daily digest ---
+    # Heartbeat cadence to the off-machine dead-man's switch. Keep well under the
+    # switch's grace period so a single missed ping does not trip it.
+    watchdog_heartbeat_minutes: int = 5
+    # Hour (UTC) of the daily "all is well" digest to ntfy.
+    watchdog_digest_hour: int = 13
+    # NB: "stale" reuses `snapshot_staleness_minutes` (the system's single stale
+    # definition, also used by the healthcheck) — the watchdog does NOT invent a
+    # tighter threshold that would false-alarm against the hourly snapshot cadence.
+
     # --- S9 hard limits (Richard, 2026-08-02; zero/empty = that limit disabled) ---
     max_position_usd: Decimal = Decimal("20000")
     max_delta_per_run_usd: Decimal = Decimal("5000")

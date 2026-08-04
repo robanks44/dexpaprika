@@ -809,6 +809,67 @@ def _cmd_dashboard(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_watchdog(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+
+    from dexpaprika.watchdog import (
+        assess_health,
+        build_digest,
+        ping,
+        run_heartbeat,
+        send_digest,
+    )
+
+    settings = Settings.load()
+    now = datetime.now(UTC)
+
+    if args.watchdog_command == "heartbeat":
+        if args.state == "auto":
+            path = db_path(settings)
+            if not path.exists():
+                _emit({"error": "database missing — run `dexpaprika db migrate`"}, as_json=as_json)
+                return EXIT_FAILURE
+            conn = connect(path)
+            try:
+                result = run_heartbeat(conn, settings, now=now)
+            finally:
+                conn.close()
+            _emit(result.model_dump(mode="json"), as_json=as_json)
+            # Honest: a ping that wasn't delivered (unconfigured or network error) is
+            # degraded — even a `fail`-state ping that reached the switch counts as sent.
+            return EXIT_OK if result.ping.sent else EXIT_DEGRADED
+        result_p = ping(settings, state=args.state)
+        _emit(result_p.model_dump(mode="json"), as_json=as_json)
+        return EXIT_OK if result_p.sent else EXIT_DEGRADED
+
+    path = db_path(settings)
+    if not path.exists():
+        _emit({"error": "database missing — run `dexpaprika db migrate`"}, as_json=as_json)
+        return EXIT_FAILURE
+    conn = connect(path)
+    try:
+        if args.watchdog_command == "status":
+            from dexpaprika.secrets import resolve_provider
+
+            verdict = assess_health(conn, settings, now=now)
+            configured = resolve_provider(settings).get("heartbeat_url") is not None
+            _emit(
+                {"heartbeat_url_configured": configured, "health": verdict.model_dump(mode="json")},
+                as_json=as_json,
+            )
+            return EXIT_OK
+        # digest
+        if args.dry_run:
+            digest = build_digest(conn, settings, now=now)
+            _emit({"dry_run": True, "digest": digest.model_dump(mode="json")}, as_json=as_json)
+            return EXIT_OK
+        result_d = send_digest(conn, settings, now=now)
+        _emit(result_d.model_dump(mode="json"), as_json=as_json)
+        return EXIT_OK if result_d.sent else EXIT_DEGRADED
+    finally:
+        conn.close()
+
+
 def _cmd_report(*, as_json: bool) -> int:
     from decimal import Decimal
 
@@ -1646,6 +1707,21 @@ def build_parser() -> argparse.ArgumentParser:
     d_export.add_argument("--out", default=None, help="Default: <data_dir>/dashboard.html")
     _add_json_flag(d_export)
 
+    watchdog = subparsers.add_parser(
+        "watchdog", help="External dead-man's-switch heartbeat + daily digest."
+    )
+    watchdog_sub = watchdog.add_subparsers(dest="watchdog_command", required=True)
+    w_hb = watchdog_sub.add_parser(
+        "heartbeat", help="Ping the off-machine switch (assess→ok/fail)."
+    )
+    w_hb.add_argument("--state", default="auto", choices=("auto", "ok", "fail", "start"))
+    _add_json_flag(w_hb)
+    w_dg = watchdog_sub.add_parser("digest", help="Build + send the daily all-clear digest.")
+    w_dg.add_argument("--dry-run", action="store_true", help="Build + print; send nothing.")
+    _add_json_flag(w_dg)
+    w_st = watchdog_sub.add_parser("status", help="Heartbeat-url configured? + recorder freshness.")
+    _add_json_flag(w_st)
+
     report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
     _add_json_flag(report)
 
@@ -1738,6 +1814,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_recorder(args, as_json=args.as_json)
     if args.command == "dashboard":
         return _cmd_dashboard(args, as_json=args.as_json)
+    if args.command == "watchdog":
+        return _cmd_watchdog(args, as_json=args.as_json)
     if args.command == "report":
         return _cmd_report(as_json=args.as_json)
     if args.command == "hedge":

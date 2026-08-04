@@ -27,6 +27,7 @@ KNOWN_SECRETS = (
     "dexpaprika_api_key",
     "krystal_api_key",
     "coinstats_api_key",
+    "heartbeat_url",  # S13: off-machine dead-man's-switch ping URL (token is a secret)
 )
 
 

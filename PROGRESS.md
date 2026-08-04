@@ -7,18 +7,19 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: **S12b COMPLETE (tag `s12b-complete`)** — live dashboard + SSE;
-  fresh-agent verdict PASS (432 passed, 92.35% cov). S12a recorder COMPLETE
-  (`s12a-complete`). Core build S0–S11 complete; S9 hedge execution PIVOTED to on-chain
-  GmxSdk + LIVE-EXERCISED (2026-08-04); S9.6 verified. Next: S13 watchdog, S14 delta-band.
-  **S5 range-bounds custody blocker RESOLVED (probe-verified live 2026-08-04)** — S14
-  now unblocked. See SECTION_PLAN.
+- Current section: **S13 COMPLETE (tag `s13-complete`)** — external watchdog + daily
+  digest; fresh-agent verdict PASS (445 passed, 92.07% cov). S12a/S12b COMPLETE. Core build
+  S0–S11 complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED
+  (2026-08-04); S9.6 verified. Next: **S14 delta-band rebalance strategy** (last planned
+  section). **S5 range-bounds custody blocker RESOLVED** — S14 unblocked. See SECTION_PLAN.
+- Operator setup owed before watchdog is live: store `heartbeat_url` secret (off-machine
+  dead-man's switch, e.g. healthchecks.io) + `ntfy_topic` (already set for alerts).
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s12b-complete | main tip: the S12b merge (see `git log`)
+- Last completed tag: s13-complete | main tip: the S13 merge (see `git log`)
 - Remote configured: YES — private GitHub `robanks44/dexpaprika` (PAT in session
   credential store, outside the repo). main + tags pushed.
 
@@ -850,3 +851,35 @@ leave-as-is + monitor.
 - Not covered (by design): the SSE stream loop + socket bind in server.py (transport glue) —
   validated by a manual live smoke (routes + gzip + 404 on an ephemeral port), not the gate.
 - Completed: 2026-08-04 | Tag: `s12b-complete`
+
+### S13 — External watchdog + daily digest — `complete`
+- Attempts: 1 (fresh-agent FAIL→fix→PASS on one blocker)
+- Scope: the two guards for the failure mode self-hosted alerts can't catch (a dead machine
+  can't alert itself) — an OFF-machine dead-man's-switch heartbeat + a daily ntfy digest.
+  Spec: docs/specs/S13-watchdog.md. Library: checked — no healthchecks.io coverage; built
+  provider-agnostic. No probe (S13 reads recorded state + pings an operator-supplied URL).
+- Built (`dexpaprika.watchdog`): `heartbeat.ping` (provider-agnostic ok/fail/start; unset URL
+  → configured=False honest no-op; URL-token redaction, ntfy-topic hygiene; direct httpx GET
+  that bypasses api_call_log since pings are plain-text `OK`); `assess_health` (snapshot
+  freshness); `run_heartbeat` (fresh→ok / stale→fail / dead→silence). `digest.build_digest`
+  (LP in-range, coverage, distance-to-SL, net delta, funding, staleness; honest all_ok — never
+  green over stale/missing/out-of-range/near-SL; rebalance drift is a line, not a downgrade);
+  `send_digest` via reused NtfyClient. CLI `watchdog heartbeat|digest|status`. Secret
+  `heartbeat_url`. Scheduler jobs `watchdog-heartbeat` (interval) + `watchdog-digest` (daily).
+- Tests (tests/test_watchdog.py, 12, offline): ping path-per-state + unconfigured no-op +
+  token redaction; assess_health fresh/stale/empty; run_heartbeat ok/fail; digest all-clear /
+  flags-out-of-range+stale / never-green-over-missing; send_digest unconfigured + delivers;
+  CLI status/heartbeat/digest; **hourly-cadence-no-false-alarm regression pin**.
+- Fresh-agent gate: first pass FAILED — watchdog stale thresholds (15m heartbeat, hardcoded
+  5m digest) false-alarmed against the documented HOURLY snapshot cadence (heartbeat would
+  ping /fail ~75% of every hour; digest never green). Fixed: reuse `snapshot_staleness_minutes`
+  (90 — the system's single stale definition, also the healthcheck's) for both heartbeat +
+  digest; exit-code honesty (undelivered ping → degraded). Regression-pinned. Re-verify PASS.
+- Verifier verdict (fresh agent): **445 passed, 4 deselected**; coverage **92.07%** (80%
+  gate); ruff + mypy(strict) clean. **VERDICT: PASS.**
+- Operator setup (owed before live): store `heartbeat_url` (off-machine switch) as a secret;
+  the switch MUST live off the watched machine (system can't verify — documented in RUNBOOK).
+- Behaviour note (Richard can flip): rebalance-drift is shown as an info line, NOT an
+  all-clear downgrade — the daily digest stays green while flagging rebalance status. If you
+  want rebalance-needed to downgrade the digest to "attention" pre-S14, say so.
+- Completed: 2026-08-04 | Tag: `s13-complete`

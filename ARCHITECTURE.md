@@ -238,6 +238,19 @@ state adds both token USD prices + pool 24h volume (DexPaprika, null-with-reason
 absent); hedge state adds the SL order size beside its trigger. Liveness table
 `recorder_heartbeat` (migration 0003) is append-only; readers never block the writer.
 
+### 6.3 External watchdog + daily digest (S13 — BUILT 2026-08-04)
+
+`dexpaprika.watchdog`: the two guards for the failure mode self-hosted alerts can't catch —
+a dead machine can't alert itself. (1) `heartbeat` pings an OFF-machine dead-man's switch
+(healthchecks.io-style, provider-agnostic; URL is the secret `heartbeat_url`) — healthy →
+`ok`, stalled-but-alive → `fail`, dead → silence (switch trips). `assess_health` reads the
+newest snapshot ts (reuses S12b staleness); the ping-URL token gets ntfy-topic hygiene (never
+in api_call_log, logs, exceptions). (2) `digest` sends a daily "all clear / attention"
+position summary to ntfy (reuses S8 NtfyClient + S12b read layer), honest: never green over
+stale/missing/out-of-range/near-SL data. Both run as scheduler jobs (heartbeat interval +
+digest daily). No new runtime dep. Outbound HTTP is intentional here (unlike the dashboard) —
+reaching the external switch is the point.
+
 ### 6.2 Dashboard (S12b — BUILT 2026-08-04)
 
 `dexpaprika.dashboard`: a LOCAL, read-only view over the recorder's store. Invariant —

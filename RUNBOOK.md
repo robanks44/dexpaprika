@@ -237,6 +237,34 @@ dexpaprika dashboard export [--out FILE]
 - Charts use Apache ECharts vendored locally (`dashboard/static/echarts.min.js.gz`,
   Apache-2.0) — no CDN, zero new Python dependency.
 
+## External watchdog + daily digest (S13)
+
+```
+dexpaprika watchdog heartbeat [--state auto|ok|fail|start]
+dexpaprika watchdog digest    [--dry-run]
+dexpaprika watchdog status
+```
+
+- **Setup (operator, one-time):** create a check on an OFF-MACHINE dead-man's switch
+  (healthchecks.io free tier or equivalent), then store its ping URL as the secret
+  `heartbeat_url` — OS keyring (service `dexpaprika`) or `DEXPAPRIKA_SECRET_HEARTBEAT_URL`.
+  **It MUST NOT live on the watched machine** — that's the whole point: a dead machine
+  cannot alert itself, so the switch (elsewhere) raises the alert when pings stop.
+- `watchdog heartbeat` (scheduled every `watchdog_heartbeat_minutes`, default 5): `auto`
+  assesses recorder freshness, then pings `ok` when fresh, `fail` when stale. A dead machine
+  sends nothing → the switch trips on silence. Set the switch's grace period comfortably above
+  the ping cadence. Unconfigured URL → honest no-op (exit 3 degraded), never a fake success.
+- `watchdog digest` (scheduled daily at `watchdog_digest_hour` UTC, default 13:00): builds an
+  "all clear / attention" position summary (LP in-range, hedge coverage, distance-to-SL,
+  net delta, funding, staleness) and sends it to ntfy — replacing the old once-daily manual
+  check. It reports "all clear" ONLY over fresh, healthy data; stale/missing/out-of-range/
+  near-SL downgrades it to "attention" (never a fabricated green). `--dry-run` prints without
+  sending. Rebalance drift is shown as a line, not an all-clear downgrade.
+- `watchdog status`: offline — is `heartbeat_url` configured?, plus the recorder freshness
+  verdict. No ping.
+- The digest is a SUMMARY, not a re-fire of S8 alerts; S8 still fires actionable per-rule
+  alerts. The watchdog adds the external liveness guard + the daily all-clear.
+
 ## Hedge analysis (S7 — read-only)
 
 ```
