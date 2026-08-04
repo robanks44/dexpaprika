@@ -610,9 +610,10 @@ pause until GMX finishes migrating (indefinite; on-chain path works today).
   (submit-only); move-SL = create new StopLossDecrease → wait for nonce → cancel old.
   ALL S9 safeguards unchanged (dry-run, arm, ntfy approval, kill-switch, hard limits,
   audit chain, post-condition auto-trip). The 40 safeguard tests below still hold; the
-  on-chain sidecar path itself is NOT yet under tests-first / fresh-agent verification —
-  **OWED** (tracked as a follow-up section). Live proof: SL $1,900→$1,901 on Arbitrum,
-  armed → phone-approved → submitted → verified (audit ids 59–71).
+  on-chain sidecar **plumbing + source invariants are now under offline tests +
+  fresh-agent verification (S9.6, 2026-08-04)** — live network behaviour was verified by
+  the live SL move. Live proof: SL $1,900→$1,901 on Arbitrum, armed → phone-approved →
+  submitted → verified (audit ids 59–71).
 - Branch: `section/s9-execution` | Merge commit: — | Tag: —
 - GO-AHEAD RECORDED: Richard, "start s9", 2026-08-02. Decisions: subaccount +
   official-SDK sidecar custody (research-backed; community Python SDK rejected
@@ -719,3 +720,24 @@ pause until GMX finishes migrating (indefinite; on-chain path works today).
 - PENDING WITH RICHARD: the supervised armed testnet nudge on his Windows machine
   per docs/TESTNET-REHEARSAL.md (needs a testnet position, One-Click subaccount key,
   faucet ETH — none creatable by the verifier)
+
+### S9.6 — On-chain executor verification — `complete`
+- Attempts: 1
+- Scope: lock the 2026-08-04 express→on-chain pivot with OFFLINE tests + a
+  fresh-agent gate. Live network behaviour was already verified by the live SL
+  move ($1,900→$1,901, audit ids 59–71); S9.6 covers the wiring + source invariants
+  a fresh agent CAN verify with zero network.
+- Tests (tests/test_execute_onchain.py, 10): runner defaults to
+  gmx_exec_onchain.cjs (DEXPAPRIKA_SIDECAR_SCRIPT override); submit resolves
+  gmx_wallet_key → GMX_WALLET_KEY; read/prepare never receive it; submit fails
+  closed without it; no DEXPAPRIKA_SECRET_* leaks to the sidecar;
+  GMX_RPC/ORACLE/SUBSQUID_URL pass through; sidecar source: target read from env
+  (no hardcoded account/key), wallet-addr==account guard, nonce-safe
+  create→wait→cancel ordering, cancel-order supported.
+- Verifier verdict (fresh agent, verbatim): HEAD bba6b36, tree clean; ruff PASS;
+  mypy strict PASS (85 files); pytest **405 passed, 4 deselected**; coverage
+  **93.77%** (80% gate reached); execute/on-chain subset 58 passed. **VERDICT: PASS.**
+- Coverage: 93.77% | ruff: clean | mypy(strict): clean
+- Not covered (by design): live on-chain network calls (RPC/oracle/GMX) — inherently
+  non-offline; validated by the supervised live exercise, not the fresh-agent gate.
+- Completed: 2026-08-04 | Tag: `s9.6-complete`
