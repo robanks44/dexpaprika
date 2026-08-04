@@ -63,7 +63,7 @@ or exception text — same discipline as the ntfy topic).
 ## Behavioural rules
 
 - **Off-machine or it's worthless.** The heartbeat only guards if the switch lives elsewhere;
-  the docs/RUNBOOK say so and the URL is operator-supplied. The system cannot verify
+  the RUNBOOK says so and the URL is operator-supplied. The system cannot verify
   off-machine-ness, so it's a documented operator responsibility.
 - **Honest health.** A stale recorder pings `fail`, never `ok`; a dead machine pings nothing.
   The digest never reports "all is well" over stale/missing data (ENGINEERING_STANDARDS §2).

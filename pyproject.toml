@@ -71,6 +71,8 @@ select = [
 # Embedded front-end asset: html.py is one big CSS+JS template string; line
 # length there is HTML/JS wrapping, not Python style.
 "src/dexpaprika/dashboard/html.py" = ["E501", "RUF001"]
+# Digest builds human-facing ntfy message text with intentional glyphs (×, Δ).
+"src/dexpaprika/watchdog/digest.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.13"

@@ -9,7 +9,13 @@ import pytest
 from dexpaprika.config import Settings
 from dexpaprika.scheduler import build_scheduler, job_specs, run_job
 
-EXPECTED_JOBS = {"snapshot", "alerts-check", "db-backup"}
+EXPECTED_JOBS = {
+    "snapshot",
+    "alerts-check",
+    "db-backup",
+    "watchdog-heartbeat",
+    "watchdog-digest",
+}
 
 
 def settings() -> Settings:
@@ -17,17 +23,24 @@ def settings() -> Settings:
 
 
 class TestJobSpecs:
-    def test_three_jobs_with_cli_argv(self) -> None:
+    def test_jobs_with_cli_argv(self) -> None:
         specs = {spec.id: spec for spec in job_specs(settings())}
         assert set(specs) == EXPECTED_JOBS
         assert specs["snapshot"].argv == ["snapshot", "--json"]
         assert specs["alerts-check"].argv == ["alerts", "check", "--json"]
         assert specs["db-backup"].argv == ["db", "backup", "--json"]
+        assert specs["watchdog-heartbeat"].argv == ["watchdog", "heartbeat", "--json"]
+        assert specs["watchdog-digest"].argv == ["watchdog", "digest", "--json"]
 
     def test_alerts_cadence_configurable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEXPAPRIKA_SCHEDULER_ALERTS_MINUTES", "7")
         specs = {spec.id: spec for spec in job_specs(Settings.load())}
         assert specs["alerts-check"].minutes == 7
+
+    def test_watchdog_cadence_configurable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DEXPAPRIKA_WATCHDOG_HEARTBEAT_MINUTES", "3")
+        specs = {spec.id: spec for spec in job_specs(Settings.load())}
+        assert specs["watchdog-heartbeat"].minutes == 3
 
 
 class TestBuildScheduler:
