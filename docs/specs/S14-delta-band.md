@@ -9,6 +9,24 @@ recorded rebalance data (never guessed); (3) **keep the widened SL as a backstop
 not touch the SL. Library checked — the strategy encyclopedia is a fundamentals course, no
 rebalance-band coverage; ground truth is the 2026-08-03 decision + VERIFIED_FINDINGS §6.
 
+## North star (Richard, 2026-08-04)
+
+**Every decision optimizes for the greatest net capital position.** Not max-safety, not
+max-simplicity — max *net* capital, which explicitly penalizes fee churn, unhedged-delta
+losses, AND catastrophic failure (a blow-up is the largest negative). Consequences baked into
+this design:
+- The rebalance decision rule is **expected-hedging-benefit > rebalance-cost**, not a fixed
+  threshold. v1 uses a notional cost-floor as a PROXY (no volatility/cost data yet); S14
+  records the attribution data so the real benefit-vs-cost rule is built from Richard's data.
+- **Capital-optimal rollout = shadow → measure → tune → enable.** Auto-trading on un-tuned
+  params bleeds capital, so S14 ships DORMANT (`auto_rebalance_enabled=False`): it evaluates +
+  logs every would-be rebalance and its net-capital attribution in shadow mode; params are
+  tuned to the settings that net the most capital; THEN live auto-execute is enabled. The
+  guardrail numbers below are starting proxies to be replaced by the data-optimal values.
+- Every executed/shadow decision is logged with enough to attribute realized net-capital
+  impact (vs holding, vs the SL-ladder baseline) — the experiment journal is how we find the
+  profit-maximizing strategy.
+
 ## Purpose
 
 Replace the tight-SL ladder (root cause of the correlated failure: SL fires at the top-of-
@@ -40,6 +58,11 @@ auto-rebalance is explicitly enabled (defense in depth: it cannot fire by defaul
     - `auto_rebalance_enabled` — the explicit opt-in flag (see config).
     Returns `decision ∈ {"execute","hold","blocked"}`, `target_eth`, `current_eth`,
     `deviation`, `reason`, and `blocked_by: list[str]` (every failing gate, for transparency).
+  - Net-capital attribution: `evaluate`/`run` persist each decision to a `rebalance_log`
+    (migration `0004`): ts, decision, current_eth, target_eth, deviation, band, price,
+    est_move_usd (|target−current|·price), gate states, executed?, executor idempotency key,
+    and the newest snapshot id — enough to score realized net-capital impact from the recorded
+    time-series later (shadow decisions included, so we can compare "would-have" vs holding).
   - `run(conn, settings, *, now, arm, sidecar=None) -> RebalanceOutcome` — evaluate, record
     the THESIS first (why + expected effect, per the operating philosophy), then:
     - if `decision=="execute"` AND `arm` AND `auto_rebalance_enabled`: build the
