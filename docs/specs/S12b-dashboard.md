@@ -1,6 +1,7 @@
 # S12b — Live dashboard + SSE push (spec)
 
-**Status:** in_progress (branch `section/s12b-dashboard`)
+**Status:** COMPLETE (tag `s12b-complete`) — fresh-agent verdict PASS (mypy blocker found
++ fixed on re-verify; 432 passed, 92.35% coverage).
 **Depends:** S12a (recorder + raw store), S6 (report read seam), S7 (`hedge.engine.analyze`
 derived metrics), S5 (range bounds).
 **Framework decision (Richard, 2026-08-04):** stdlib `http.server` — zero new runtime deps,
