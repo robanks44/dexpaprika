@@ -126,6 +126,27 @@ def evaluate(conn: sqlite3.Connection, settings: Settings, *, now: datetime) -> 
         )
 
     lp, short, price = inputs
+    if price <= 0:
+        # Defensive: a non-positive recorded price is bad data — block, never act on it
+        # (also avoids a divide-by-zero deep in analyze()). Robustness > a crashing job.
+        gates = GateStates(
+            band_breached=False,
+            fresh=False,
+            interval_ok=False,
+            cost_ok=False,
+            daily_ok=False,
+            within_max_position=False,
+            auto_enabled=settings.auto_rebalance_enabled,
+        )
+        return RebalanceDecision(
+            decision="blocked",
+            band=band,
+            price_usd=price,
+            reason="non-positive recorded price — bad data, blocked",
+            blocked_by=["bad-price"],
+            gates=gates,
+            thesis="blocked: non-positive recorded price",
+        )
     analysis = analyze(lp, short, price, settings=settings)
     current = analysis.short_size_eth
     full_target = analysis.delta_matched_target_eth

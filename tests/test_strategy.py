@@ -135,6 +135,29 @@ def test_evaluate_blocked_without_state(conn: sqlite3.Connection) -> None:
     assert d.decision == "blocked" and "no-state" in d.blocked_by
 
 
+def test_evaluate_blocks_on_non_positive_price(conn: sqlite3.Connection) -> None:
+    # Defensive: bad data (price 0) must block, not crash the strategy job (fresh-agent S14).
+    lp = dict(LP_STATE)
+    lp["price_usd"] = "0"
+    conn.execute(
+        "INSERT INTO positions (wallet_ref, venue, chain, kind, external_id, group_tag, opened_at)"
+        " VALUES ('0xC155', 'aerodrome', 'base', 'lp', 'lp:1', 'lp_hedge', ?)",
+        (NOW.isoformat(),),
+    )
+    pid = conn.execute("SELECT id FROM positions WHERE kind='lp'").fetchone()["id"]
+    conn.execute(
+        "INSERT INTO position_events (position_id, ts, type, delta_json, state_json)"
+        " VALUES (?, ?, 'observed', '{}', ?)",
+        (pid, NOW.isoformat(), json.dumps(lp)),
+    )
+    conn.execute(
+        "INSERT INTO snapshots (ts, chain, block_number, kind) VALUES (?, 'base', 1, 'lp')",
+        (NOW.isoformat(),),
+    )
+    d = evaluate(conn, _settings(), now=NOW)
+    assert d.decision == "blocked" and "bad-price" in d.blocked_by
+
+
 # --------------------------- 2. each gate blocks independently ---------------------------
 
 

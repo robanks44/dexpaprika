@@ -1,6 +1,7 @@
 # S14 — Delta-band rebalance hedge strategy (spec)
 
-**Status:** in_progress (branch `section/s14-delta-band`)
+**Status:** COMPLETE (tag `s14-complete`) — fresh-agent verdict PASS (max scrutiny on the
+money path: no path to an unintended or wrong-sized live trade; 460 passed, 92.44% coverage).
 **Depends:** S5 (live tick bounds — RESOLVED), S7 (`hedge.engine.analyze` delta target), S9
 (privileged executor), S12a (recorder = fresh state to act on).
 **Decisions (Richard, 2026-08-04):** (1) **auto-execute within hard limits** — resizes fire
