@@ -36,6 +36,15 @@ _TOKEN_DECIMALS = {
     "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": 6,  # USDC
 }
 
+# USD-pegged tokens used as the pricing numeraire (Base). token_price_usd is
+# only derivable when exactly one side is a known stable; otherwise it is
+# recorded null-with-reason (never fabricated — ENGINEERING_STANDARDS §2).
+_USD_STABLES = frozenset(
+    {
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",  # USDC (native)
+    }
+)
+
 
 def _addr_arg(address: str) -> str:
     return f"{int(address, 16):064x}"
@@ -64,7 +73,10 @@ class LpPosition(BaseModel):
     sqrt_price_x96: int | None = None
     amount0: Decimal | None = None  # decimal-adjusted token0 (e.g. WETH)
     amount1: Decimal | None = None  # decimal-adjusted token1 (e.g. USDC)
-    price_usd: Decimal | None = None
+    price_usd: Decimal | None = None  # token0 priced in token1 units (back-compat)
+    token0_price_usd: Decimal | None = None  # explicit both-token USD prices (S12a)
+    token1_price_usd: Decimal | None = None
+    pool_volume_usd_24h: Decimal | None = None  # off-chain (DexPaprika); set by recorder
     in_range: bool | None = None
     block_number: int
     warnings: list[str] = []
@@ -210,6 +222,26 @@ def discover(rpc: EvmRpcClient, wallet: str, *, settings: Settings, block: int) 
         position.amount0 = amount0_raw / Decimal(10) ** dec0
         position.amount1 = amount1_raw / Decimal(10) ** dec1
         position.price_usd = price_from_tick(tick, dec0, dec1)
+        _set_usd_prices(position)
+
+    def _set_usd_prices(position: LpPosition) -> None:
+        """Both-token USD prices from the tick price, using a stable numeraire.
+
+        price_usd is token0-in-token1. Derivable to USD only when exactly one
+        side is a known USD stable; a non-stable pair records null-with-reason.
+        """
+        token0_stable = position.token0.lower() in _USD_STABLES
+        token1_stable = position.token1.lower() in _USD_STABLES
+        if token1_stable and not token0_stable and position.price_usd is not None:
+            position.token0_price_usd = position.price_usd
+            position.token1_price_usd = Decimal(1)
+        elif token0_stable and not token1_stable and position.price_usd not in (None, 0):
+            position.token0_price_usd = Decimal(1)
+            position.token1_price_usd = Decimal(1) / position.price_usd
+        else:
+            position.warnings.append(
+                "no single USD-stable in pair — token USD prices not derivable"
+            )
 
     # 2. NFPM enumeration per owner.
     for nfpm in nfpms:

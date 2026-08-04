@@ -501,17 +501,6 @@ def _cmd_market(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
-def _derive_lifecycle_since(conn: Any, max_event_id_before: int) -> None:
-    from dexpaprika.portfolio.lifecycle import observe
-
-    rows = conn.execute(
-        "SELECT DISTINCT position_id, ts FROM position_events WHERE type='observed' AND id > ?",
-        (max_event_id_before,),
-    ).fetchall()
-    for row in rows:
-        observe(conn, row["position_id"], row["ts"])
-
-
 def _cmd_hedge(args: argparse.Namespace, *, as_json: bool) -> int:
     from decimal import Decimal
 
@@ -558,22 +547,33 @@ def _cmd_hedge(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _resolve_recorder_wallets(
+    args: argparse.Namespace, settings: Settings, kinds: list[str]
+) -> tuple[list[str], list[str]] | None:
+    """(evm_wallets, btc_wallets) for a cycle, or None if the registry is empty.
+
+    An explicit ``--address`` override is EVM-only; BTC holdings come from the
+    registry only, and only when ``holdings`` is requested (matches S6 snapshot).
+    """
+    if args.address:
+        return [args.address], []
+    registered = _registry(settings).list_wallets()
+    wallets = [w.address for w in registered if w.chain_family == "evm" and w.included]
+    btc_wallets = (
+        [w.address for w in registered if w.chain_family == "btc" and w.included]
+        if "holdings" in kinds
+        else []
+    )
+    if not wallets and not btc_wallets:
+        return None
+    return wallets, btc_wallets
+
+
 def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
     from datetime import UTC, datetime
 
-    from dexpaprika.chains import ChainRpcError, EvmRpcClient
-    from dexpaprika.clients.base import TransportError
-    from dexpaprika.clients.btc import BtcClient
-    from dexpaprika.clients.gmx import GmxClient
-    from dexpaprika.lp.discovery import VENUE as LP_VENUE
-    from dexpaprika.lp.discovery import discover
-    from dexpaprika.lp.discovery import record as record_lp
-    from dexpaprika.portfolio.aave import read_account
-    from dexpaprika.portfolio.aave import record as record_aave
-    from dexpaprika.portfolio.holdings import read_holdings
-    from dexpaprika.portfolio.holdings import record as record_holdings
-    from dexpaprika.portfolio.lifecycle import reconcile_closures
-    from dexpaprika.quota import QuotaError, QuotaTracker
+    from dexpaprika.quota import QuotaTracker
+    from dexpaprika.recorder import build_clients, run_cycle
 
     settings = Settings.load()
     path = db_path(settings)
@@ -584,137 +584,153 @@ def _cmd_snapshot(args: argparse.Namespace, *, as_json: bool) -> int:
         )
         return EXIT_FAILURE
     kinds = ["lp", "hedge", "defi", "holdings"] if args.kind == "all" else [args.kind]
-    btc_wallets: list[str] = []
-    if args.address:
-        wallets = [args.address]  # explicit override is EVM-only
-    else:
-        registered = _registry(settings).list_wallets()
-        wallets = [w.address for w in registered if w.chain_family == "evm" and w.included]
-        if "holdings" in kinds:
-            btc_wallets = [w.address for w in registered if w.chain_family == "btc" and w.included]
-        if not wallets and not btc_wallets:
-            _emit(
-                {"error": "no included wallets in the registry — pass --address"},
-                as_json=as_json,
-            )
-            return EXIT_FAILURE
-    ts = datetime.now(UTC).isoformat()
+    resolved = _resolve_recorder_wallets(args, settings, kinds)
+    if resolved is None:
+        _emit(
+            {"error": "no included wallets in the registry — pass --address"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    wallets, btc_wallets = resolved
     conn = connect(path)
     try:
         QuotaTracker(conn).ensure_providers()
-        recorded: dict[str, int] = {}
-
-        def max_event_id() -> int:
-            row = conn.execute("SELECT COALESCE(MAX(id), 0) AS m FROM position_events").fetchone()
-            return int(row["m"])
-
-        base_rpc = None
-        if wallets and any(k in kinds for k in ("lp", "defi", "holdings")):
-            base_rpc = EvmRpcClient(
-                conn,
-                "base",
-                settings=settings,
-                clients=[_http_client_factory(url) for url in settings.base_rpc_urls],
-            )
-            base_pin = base_rpc.resolve_pin()
-
-        if "lp" in kinds and base_rpc is not None:
-            before = max_event_id()
-            count = 0
-            for wallet in wallets:
-                positions = discover(base_rpc, wallet, settings=settings, block=base_pin)
-                for position in positions:
-                    record_lp(conn, wallet, position, ts)
-                    count += 1
-                reconcile_closures(
-                    conn,
-                    wallet,
-                    LP_VENUE,
-                    "lp",
-                    [f"{p.nfpm.lower()}:{p.token_id}" for p in positions],
-                    ts,
-                )
-            _derive_lifecycle_since(conn, before)
-            conn.execute(
-                "INSERT INTO snapshots (ts, chain, block_number, kind) VALUES (?, 'base', ?, 'lp')",
-                (ts, base_pin),
-            )
-            recorded["lp"] = count
-
-        if "hedge" in kinds:
-            before = max_event_id()
-            gmx = GmxClient(
-                conn,
-                settings=settings,
-                clients=[_http_client_factory(peer) for peer in settings.gmx_rest_peers],
-            )
-            count = 0
-            for wallet in wallets:
-                positions_g = gmx.get_positions(wallet)
-                for position_g in positions_g:
-                    gmx.record_observation(position_g)
-                    count += 1
-                reconcile_closures(conn, wallet, "gmx", "perp", [p.key for p in positions_g], ts)
-            _derive_lifecycle_since(conn, before)
-            conn.execute(
-                "INSERT INTO snapshots (ts, chain, block_number, kind)"
-                " VALUES (?, 'arbitrum', NULL, 'hedge')",
-                (ts,),
-            )
-            recorded["hedge"] = count
-
-        if "defi" in kinds and base_rpc is not None:
-            before = max_event_id()
-            count = 0
-            for wallet in wallets:
-                account = read_account(base_rpc, wallet, settings=settings, block=base_pin)
-                count += record_aave(conn, wallet, account, ts)
-            _derive_lifecycle_since(conn, before)
-            conn.execute(
-                "INSERT INTO snapshots (ts, chain, block_number, kind)"
-                " VALUES (?, 'base', ?, 'defi')",
-                (ts, base_pin),
-            )
-            recorded["defi"] = count
-
-        if "holdings" in kinds and (base_rpc is not None or btc_wallets):
-            before = max_event_id()
-            count = 0
-            if base_rpc is not None:
-                for wallet in wallets:
-                    holdings = read_holdings(base_rpc, "base", wallet, block=base_pin)
-                    count += record_holdings(conn, wallet, "base", holdings, ts)
-            if btc_wallets:
-                btc = BtcClient(
-                    conn,
-                    settings=settings,
-                    clients=[_http_client_factory(peer) for peer in settings.btc_esplora_peers],
-                )
-                for wallet in btc_wallets:
-                    btc.record(wallet, btc.get_address(wallet), ts)
-                    count += 1
-            _derive_lifecycle_since(conn, before)
-            if base_rpc is not None:
-                conn.execute(
-                    "INSERT INTO snapshots (ts, chain, block_number, kind)"
-                    " VALUES (?, 'base', ?, 'holdings')",
-                    (ts, base_pin),
-                )
-            if btc_wallets:
-                # Off-chain-pinned source: carries its timestamp, no block (§2).
-                conn.execute(
-                    "INSERT INTO snapshots (ts, chain, block_number, kind)"
-                    " VALUES (?, 'bitcoin', NULL, 'holdings')",
-                    (ts,),
-                )
-            recorded["holdings"] = count
-    except (ChainRpcError, TransportError, QuotaError) as exc:
-        _emit({"error": str(exc)}, as_json=as_json)
+        clients = build_clients(
+            conn,
+            settings,
+            kinds=kinds,
+            wallets=wallets,
+            btc_wallets=btc_wallets,
+            client_factory=_http_client_factory,
+        )
+        result = run_cycle(
+            conn,
+            settings,
+            kinds=kinds,
+            wallets=wallets,
+            btc_wallets=btc_wallets,
+            now=datetime.now(UTC),
+            clients=clients,
+        )
+    finally:
+        conn.close()
+    # snapshot keeps its fail-hard contract: any failed source → EXIT_FAILURE
+    # (the failing source rolled back — nothing partial recorded). Per-source
+    # isolation is the recorder SERVICE's behaviour, not the one-shot command.
+    if not result.all_ok():
+        failed = {k: s.error for k, s in result.sources.items() if not s.ok}
+        _emit({"error": f"source(s) failed: {failed}"}, as_json=as_json)
         return EXIT_FAILURE
+    _emit(
+        {"ts": result.ts, "wallets": result.wallets, "recorded": result.counts},
+        as_json=as_json,
+    )
+    return EXIT_OK
+
+
+def _cmd_recorder(args: argparse.Namespace, *, as_json: bool) -> int:
+    from datetime import UTC, datetime
+
+    from dexpaprika.quota import QuotaTracker
+    from dexpaprika.recorder import RecorderService, build_clients, run_cycle
+
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+
+    if args.recorder_command == "status":
+        conn = connect(path)
+        try:
+            rows = conn.execute(
+                "SELECT kind, ts, ok, block FROM recorder_heartbeat h"
+                " WHERE h.id = (SELECT MAX(id) FROM recorder_heartbeat WHERE kind = h.kind)"
+                " ORDER BY kind"
+            ).fetchall()
+            now = datetime.now(UTC)
+            sources = {
+                r["kind"]: {
+                    "ts": r["ts"],
+                    "ok": bool(r["ok"]),
+                    "block": r["block"],
+                    "staleness_seconds": (now - datetime.fromisoformat(r["ts"])).total_seconds(),
+                }
+                for r in rows
+            }
+        finally:
+            conn.close()
+        _emit({"sources": sources}, as_json=as_json)
+        return EXIT_OK
+
+    kinds = ["lp", "hedge", "defi", "holdings"] if args.kind == "all" else [args.kind]
+    resolved = _resolve_recorder_wallets(args, settings, kinds)
+    if resolved is None:
+        _emit(
+            {"error": "no included wallets in the registry — pass --address"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+    wallets, btc_wallets = resolved
+    conn = connect(path)
+    try:
+        QuotaTracker(conn).ensure_providers()
+        clients = build_clients(
+            conn,
+            settings,
+            kinds=kinds,
+            wallets=wallets,
+            btc_wallets=btc_wallets,
+            client_factory=_http_client_factory,
+        )
+        if args.recorder_command == "cycle":
+            result = run_cycle(
+                conn,
+                settings,
+                kinds=kinds,
+                wallets=wallets,
+                btc_wallets=btc_wallets,
+                now=datetime.now(UTC),
+                clients=clients,
+            )
+            _emit(
+                {
+                    "ts": result.ts,
+                    "wallets": result.wallets,
+                    "recorded": result.counts,
+                    "ok": result.all_ok(),
+                },
+                as_json=as_json,
+            )
+            return EXIT_OK
+
+        # recorder run — the service loop (foreground; a scheduler/NSSM wraps it).
+        import time
+
+        intervals = {"lp": args.lp_interval, "defi": args.lp_interval, "holdings": args.lp_interval}
+        intervals["hedge"] = args.hedge_interval
+        service = RecorderService(
+            conn,
+            settings,
+            kinds=kinds,
+            wallets=wallets,
+            btc_wallets=btc_wallets,
+            intervals=intervals,
+            clock=lambda: datetime.now(UTC),
+            sleep=time.sleep,
+            clients=clients,
+        )
+        status = service.run(max_cycles=args.max_cycles)
     finally:
         conn.close()
     _emit(
-        {"ts": ts, "wallets": wallets + btc_wallets, "recorded": recorded},
+        {
+            "cycles": status.cycles,
+            "sources": {k: {"ok": s.ok, "ts": s.ts} for k, s in status.sources.items()},
+        },
         as_json=as_json,
     )
     return EXIT_OK
@@ -1522,6 +1538,27 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--address", default=None, help="Default: all included EVM wallets.")
     _add_json_flag(snapshot)
 
+    recorder = subparsers.add_parser(
+        "recorder", help="Full-variable recorder: single cycle, service loop, or status."
+    )
+    recorder_sub = recorder.add_subparsers(dest="recorder_command", required=True)
+    _kind_choices = ("lp", "hedge", "defi", "holdings", "all")
+    r_cycle = recorder_sub.add_parser("cycle", help="One recording cycle (scheduler fallback).")
+    r_cycle.add_argument("--kind", default="all", choices=_kind_choices)
+    r_cycle.add_argument("--address", default=None, help="Default: all included EVM wallets.")
+    _add_json_flag(r_cycle)
+    r_run = recorder_sub.add_parser("run", help="Run the recorder service loop (foreground).")
+    r_run.add_argument("--kind", default="all", choices=_kind_choices)
+    r_run.add_argument("--address", default=None, help="Default: all included EVM wallets.")
+    r_run.add_argument("--lp-interval", type=float, default=60.0, help="Seconds between LP cycles.")
+    r_run.add_argument(
+        "--hedge-interval", type=float, default=30.0, help="Seconds between hedge cycles."
+    )
+    r_run.add_argument("--max-cycles", type=int, default=None, help="Bound the loop (tests/smoke).")
+    _add_json_flag(r_run)
+    r_status = recorder_sub.add_parser("status", help="Last cycle per source + staleness.")
+    _add_json_flag(r_status)
+
     report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
     _add_json_flag(report)
 
@@ -1610,6 +1647,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_lp(args, as_json=args.as_json)
     if args.command == "snapshot":
         return _cmd_snapshot(args, as_json=args.as_json)
+    if args.command == "recorder":
+        return _cmd_recorder(args, as_json=args.as_json)
     if args.command == "report":
         return _cmd_report(as_json=args.as_json)
     if args.command == "hedge":

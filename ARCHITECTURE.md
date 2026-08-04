@@ -219,9 +219,24 @@ dexpaprika execute ...                # S9 ONLY, separate command; dry-run defau
 > $1,900→$1,901 through arm → phone approval → submit → post-condition verify.
 > **Owed:** tests-first + fresh-agent verification of the on-chain sidecar path
 > (the 40 Python safeguard tests still hold; the Node write path is not yet TDD-covered).
-> Also newly required (2026-08-04 decisions, not yet built): a persistent recorder service
-> + LIVE dashboard, an EXTERNAL dead-man's-switch heartbeat + daily ntfy digest, and the
-> delta-band rebalance hedge strategy (replaces the SL ladder once S5 range-bounds land).
+> Also newly required (2026-08-04 decisions): a persistent recorder service
+> + LIVE dashboard (recorder service BUILT in S12a; dashboard is S12b), an EXTERNAL
+> dead-man's-switch heartbeat + daily ntfy digest (S13), and the delta-band rebalance
+> hedge strategy (S14; replaces the SL ladder now S5 range-bounds have landed).
+
+### 6.1 Recorder service (S12a — BUILT 2026-08-04)
+
+`dexpaprika.recorder`: `run_cycle` is the one-shot recording cycle extracted from
+`snapshot` (identical DB effects), and `RecorderService` loops it per-source cadence
+for liveness. Correctness never requires the daemon (ENGINEERING_STANDARDS §6): a
+series of scheduled `recorder cycle` calls produces the same rows as `recorder run`,
+property-tested. Per-source isolation (one failed source backs off, never stops the
+loop) and honest staleness (a failed source keeps its stale stamp, flagged not-ok)
+are the service's, not `snapshot`'s — `snapshot` keeps its fail-hard contract.
+Full-variable capture (RAW only; derived metrics are S12b's read-time concern): LP
+state adds both token USD prices + pool 24h volume (DexPaprika, null-with-reason when
+absent); hedge state adds the SL order size beside its trigger. Liveness table
+`recorder_heartbeat` (migration 0003) is append-only; readers never block the writer.
 
 Per ENGINEERING_STANDARDS §4, designed now so earlier sections leave the right seams
 (all safeguards below remain in force; only the venue write-path changed to on-chain):

@@ -29,7 +29,7 @@ read-time concern (S12b). This section does NOT build the dashboard (that is S12
   - `dexpaprika recorder run [--kind ...] [--lp-interval S] [--hedge-interval S]
     [--max-cycles N] [--json]` — the service loop (foreground; a Windows service/NSSM or
     scheduled-at-logon wraps it — see python-scheduling--playbook--windows.md). `--max-cycles`
-    bounds it for tests/smoke.
+    bounds it for test and smoke runs.
   - `dexpaprika recorder status [--json]` — last cycle per source + staleness + heartbeat age.
 - Schema (migration `0003_recorder.sql`): `recorder_heartbeat (id, ts, kind, ok, block,
   detail_json)` — append-only; readers never block the writer (WAL). No change to existing

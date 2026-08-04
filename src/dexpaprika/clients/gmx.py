@@ -52,6 +52,10 @@ TOKEN_DECIMALS = {
 }
 
 
+def _opt_str(value: Decimal | None) -> str | None:
+    return str(value) if value is not None else None
+
+
 def _shift(raw: str | int, places: int) -> Decimal:
     """Exact decimal-point shift via the tuple form — context-free, never rounds.
 
@@ -311,10 +315,21 @@ class GmxClient:
             (position.account, position.key),
         ).fetchone()["id"]
         state = position.model_dump(mode="json", exclude={"raw", "related_orders"})
-        state["stop_loss_triggers"] = [
-            str(o.trigger_price)
+        sl_orders = [
+            o
             for o in position.related_orders
             if o.order_kind == "stop-loss-decrease" and o.trigger_price is not None
+        ]
+        state["stop_loss_triggers"] = [str(o.trigger_price) for o in sl_orders]
+        # SL SIZE co-located in hedge state (S12a): trigger + size per SL order,
+        # so the full-variable set does not require a join to the orders table.
+        state["stop_loss_orders"] = [
+            {
+                "trigger": str(o.trigger_price),
+                "size_usd": None if o.is_full_close else _opt_str(o.size_delta_usd),
+                "is_full_close": o.is_full_close,
+            }
+            for o in sl_orders
         ]
         self._conn.execute(
             "INSERT INTO position_events (position_id, ts, type, delta_json, state_json)"
