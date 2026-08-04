@@ -1,6 +1,7 @@
 # S13 — External watchdog + daily digest (spec)
 
-**Status:** in_progress (branch `section/s13-watchdog`)
+**Status:** COMPLETE (tag `s13-complete`) — fresh-agent verdict PASS (staleness-threshold
+blocker found + fixed on re-verify; 445 passed, 92.07% coverage).
 **Depends:** S8 (alerts/ntfy delivery), S12a (recorder + snapshots/heartbeat), S12b (read layer).
 **Decision basis:** PROGRESS 2026-08-04 "NEW top risk — silent failure / automation
 complacency": once alerts replace the daily check, a DEAD recorder = nobody watching, worse
