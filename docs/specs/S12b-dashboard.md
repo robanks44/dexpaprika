@@ -34,8 +34,12 @@ computed at read/display time from RAW rows (S12a) — nothing derived is stored
 - `dexpaprika.dashboard.app.route(path, query, conn, settings) -> RouteResult` — pure
   request router (status, content_type, body). Every HTTP route resolves through this so the
   logic is unit-tested with zero sockets. Routes:
-  - `GET /` → the self-contained HTML shell (inline CSS + vanilla-JS, no CDN, no network at
-    view time; a minimal canvas line-chart — nothing fetched externally).
+  - `GET /` → the self-contained HTML shell (inline CSS + vanilla-JS). Charts use **Apache
+    ECharts, VENDORED locally** (Richard, 2026-08-04) — the minified JS lives in
+    `dashboard/static/` and is served by THIS server (`GET /static/echarts.min.js`); NO CDN,
+    no network at view time. Charts: line/area price+size history, gauges for
+    distance-to-SL / distance-to-liq / coverage, an in-range position bar. Design follows the
+    `dataviz` skill (palette, dark/light, dense layout).
   - `GET /api/latest` → `latest_view` as JSON.
   - `GET /api/history?kind=&field=&since=` → `history` as JSON.
   - `GET /api/derived` → `derived` as JSON.
@@ -55,7 +59,8 @@ computed at read/display time from RAW rows (S12a) — nothing derived is stored
     the DB the recorder writes; typically launched beside `recorder run`).
   - `dexpaprika dashboard export [--out FILE]` — the secondary path: render ONE
     self-contained static HTML snapshot of the current latest+derived view (no server, no
-    SSE) for sharing/archival.
+    SSE) for sharing/archival. The vendored ECharts JS is INLINED into the file (`<script>…`)
+    so the export is truly standalone — opens offline with charts intact, zero external refs.
 
 ## Behavioural rules
 
