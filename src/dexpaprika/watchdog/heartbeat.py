@@ -100,8 +100,13 @@ def assess_health(
     now: datetime,
     max_age_s: float | None = None,
 ) -> HealthVerdict:
-    """Is the recorder fresh? Reads the newest snapshot ts (no network)."""
-    limit = max_age_s if max_age_s is not None else settings.watchdog_stale_minutes * 60
+    """Is the recorder fresh? Reads the newest snapshot ts (no network).
+
+    "Stale" reuses ``snapshot_staleness_minutes`` — the system's single stale
+    definition (also the healthcheck's ``last_snapshot_age``) — so the watchdog
+    never false-alarms against the documented snapshot cadence.
+    """
+    limit = max_age_s if max_age_s is not None else settings.snapshot_staleness_minutes * 60
     row = conn.execute("SELECT MAX(ts) AS ts FROM snapshots").fetchone()
     newest = row["ts"] if row else None
     if not newest:

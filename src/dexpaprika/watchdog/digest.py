@@ -54,7 +54,11 @@ def _dec(value: Any) -> Decimal | None:
 
 def build_digest(conn: sqlite3.Connection, settings: Settings, *, now: datetime) -> Digest:
     """Compose the daily digest from the latest recorded state (read-only)."""
-    lv = latest_view(conn, now=now)
+    # Staleness uses the system's single stale definition (snapshot_staleness_minutes),
+    # NOT the dashboard live-view default — so the daily digest doesn't read "attention"
+    # against the hourly snapshot cadence.
+    stale_after_s = settings.snapshot_staleness_minutes * 60
+    lv = latest_view(conn, now=now, stale_after_s=stale_after_s)
     dv = derived(conn, settings)
     lp = lv.sources["lp"]
     hedge = lv.sources["hedge"]

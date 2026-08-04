@@ -21,9 +21,10 @@ can't alert itself):
    manual once-daily check (PROGRESS baseline: Richard managed positions once/day).
 
 No new runtime dependency. Outbound HTTP is intentional here (unlike the dashboard) — the
-watchdog's whole job is to reach an external service; it goes through the shared quota-tracked
-transport with URL/topic hygiene (the ping URL's secret token never hits api_call_log, logs,
-or exception text — same discipline as the ntfy topic).
+watchdog's whole job is to reach an external service. The digest goes through the NtfyClient
+(shared transport). The heartbeat ping response is plain text (`OK`), so it uses a direct,
+injectable httpx GET that BYPASSES api_call_log entirely — so the secret token never reaches
+the log — and redacts the token from any exception (same hygiene intent as the ntfy topic).
 
 ## Public interface
 

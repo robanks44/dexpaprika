@@ -136,10 +136,12 @@ def test_ping_error_redacts_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_assess_health_fresh_stale_empty(conn: sqlite3.Connection) -> None:
+    # Threshold reuses snapshot_staleness_minutes (default 90) — fresh well within an
+    # hourly cadence, stale only well past it (no false alarms against hourly snapshots).
     assert assess_health(conn, _settings(), now=T0).ok is False  # empty → not ok
     _seed(conn, ts=T0)
-    assert assess_health(conn, _settings(), now=T0 + timedelta(minutes=5)).ok is True
-    stale = assess_health(conn, _settings(), now=T0 + timedelta(minutes=30))
+    assert assess_health(conn, _settings(), now=T0 + timedelta(minutes=45)).ok is True
+    stale = assess_health(conn, _settings(), now=T0 + timedelta(hours=2))
     assert stale.ok is False and "stale" in stale.reason
 
 
@@ -155,7 +157,7 @@ def test_run_heartbeat_pings_ok_when_fresh_fail_when_stale(
     r_ok = run_heartbeat(
         conn,
         _settings(),
-        now=T0 + timedelta(minutes=5),
+        now=T0 + timedelta(minutes=45),
         client_factory=_capturing_factory(ok_paths),
     )
     assert r_ok.verdict.ok and r_ok.ping.state == "ok" and ok_paths == ["/deadbeef-token"]
@@ -163,11 +165,27 @@ def test_run_heartbeat_pings_ok_when_fresh_fail_when_stale(
     r_fail = run_heartbeat(
         conn,
         _settings(),
-        now=T0 + timedelta(minutes=30),
+        now=T0 + timedelta(hours=2),
         client_factory=_capturing_factory(fail_paths),
     )
     assert r_fail.verdict.ok is False and r_fail.ping.state == "fail"
     assert fail_paths == ["/deadbeef-token/fail"]
+
+
+def test_hourly_cadence_does_not_false_alarm(
+    conn: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression pin (fresh-agent S13): with hourly snapshots, a 55-min-old snapshot
+    # (typical just before the next hourly write) must NOT trip the switch or read
+    # "attention" — the watchdog stale threshold reuses snapshot_staleness_minutes (90).
+    monkeypatch.setenv("DEXPAPRIKA_SECRET_HEARTBEAT_URL", HB_URL)
+    _seed(conn, ts=T0, in_range=True)
+    near_next = T0 + timedelta(minutes=55)
+    assert assess_health(conn, _settings(), now=near_next).ok is True
+    paths: list[str] = []
+    r = run_heartbeat(conn, _settings(), now=near_next, client_factory=_capturing_factory(paths))
+    assert r.ping.state == "ok" and paths == ["/deadbeef-token"]  # ok, not /fail
+    assert build_digest(conn, _settings(), now=near_next).all_ok is True  # green, not attention
 
 
 # --------------------------- 5. build_digest ---------------------------
@@ -175,7 +193,8 @@ def test_run_heartbeat_pings_ok_when_fresh_fail_when_stale(
 
 def test_build_digest_all_clear_when_healthy(conn: sqlite3.Connection) -> None:
     _seed(conn, ts=T0, in_range=True)
-    d = build_digest(conn, _settings(), now=T0 + timedelta(minutes=5))
+    # 45 min old is fresh under the 90-min stale threshold — matches an hourly cadence.
+    d = build_digest(conn, _settings(), now=T0 + timedelta(minutes=45))
     assert d.all_ok is True
     assert "all clear" in d.title
     assert "in range" in d.message and "coverage" in d.message and "dist to SL" in d.message
@@ -184,8 +203,8 @@ def test_build_digest_all_clear_when_healthy(conn: sqlite3.Connection) -> None:
 
 def test_build_digest_flags_out_of_range_and_stale(conn: sqlite3.Connection) -> None:
     _seed(conn, ts=T0, in_range=False)
-    # 30 min later → both sources stale AND LP out of range
-    d = build_digest(conn, _settings(), now=T0 + timedelta(minutes=30))
+    # 2h later → both sources stale (> 90m) AND LP out of range
+    d = build_digest(conn, _settings(), now=T0 + timedelta(hours=2))
     assert d.all_ok is False
     assert "attention" in d.title
     assert any("out of range" in c for c in d.concerns)

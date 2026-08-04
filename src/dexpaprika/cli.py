@@ -835,10 +835,12 @@ def _cmd_watchdog(args: argparse.Namespace, *, as_json: bool) -> int:
             finally:
                 conn.close()
             _emit(result.model_dump(mode="json"), as_json=as_json)
-            return EXIT_OK if result.ping.configured else EXIT_DEGRADED
+            # Honest: a ping that wasn't delivered (unconfigured or network error) is
+            # degraded — even a `fail`-state ping that reached the switch counts as sent.
+            return EXIT_OK if result.ping.sent else EXIT_DEGRADED
         result_p = ping(settings, state=args.state)
         _emit(result_p.model_dump(mode="json"), as_json=as_json)
-        return EXIT_OK if result_p.configured else EXIT_DEGRADED
+        return EXIT_OK if result_p.sent else EXIT_DEGRADED
 
     path = db_path(settings)
     if not path.exists():
