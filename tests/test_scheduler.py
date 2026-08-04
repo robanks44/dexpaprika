@@ -15,6 +15,7 @@ EXPECTED_JOBS = {
     "db-backup",
     "watchdog-heartbeat",
     "watchdog-digest",
+    "strategy-rebalance",
 }
 
 
@@ -31,6 +32,7 @@ class TestJobSpecs:
         assert specs["db-backup"].argv == ["db", "backup", "--json"]
         assert specs["watchdog-heartbeat"].argv == ["watchdog", "heartbeat", "--json"]
         assert specs["watchdog-digest"].argv == ["watchdog", "digest", "--json"]
+        assert specs["strategy-rebalance"].argv == ["strategy", "rebalance", "--arm", "--json"]
 
     def test_alerts_cadence_configurable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DEXPAPRIKA_SCHEDULER_ALERTS_MINUTES", "7")

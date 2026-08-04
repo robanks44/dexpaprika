@@ -76,6 +76,12 @@ def job_specs(settings: Settings) -> list[JobSpec]:
             hour=settings.watchdog_digest_hour,
             minute=0,
         ),
+        JobSpec(
+            id="strategy-rebalance",
+            argv=["strategy", "rebalance", "--arm", "--json"],
+            trigger="interval",
+            minutes=settings.strategy_rebalance_minutes,
+        ),
     ]
 
 

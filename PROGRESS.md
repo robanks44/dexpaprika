@@ -7,19 +7,30 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: **S13 COMPLETE (tag `s13-complete`)** — external watchdog + daily
-  digest; fresh-agent verdict PASS (445 passed, 92.07% cov). S12a/S12b COMPLETE. Core build
-  S0–S11 complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED
-  (2026-08-04); S9.6 verified. Next: **S14 delta-band rebalance strategy** (last planned
-  section). **S5 range-bounds custody blocker RESOLVED** — S14 unblocked. See SECTION_PLAN.
-- Operator setup owed before watchdog is live: store `heartbeat_url` secret (off-machine
-  dead-man's switch, e.g. healthchecks.io) + `ntfy_topic` (already set for alerts).
+- Current section: **S14 COMPLETE (tag `s14-complete`) — ALL PLANNED SECTIONS DONE.**
+  Delta-band rebalance strategy; fresh-agent verdict PASS with max scrutiny on the money path
+  (no unintended/wrong-sized trade; 460 passed, 92.44% cov). S12a/S12b/S13 COMPLETE; core
+  build S0–S11 complete; S9 on-chain + LIVE-EXERCISED (2026-08-04); S9.6 verified.
+- Standing objective (Richard, 2026-08-04): **every decision optimizes for the greatest net
+  capital position.**
+- Operator setup owed before going live: (1) store `heartbeat_url` secret (off-machine
+  dead-man's switch) + `ntfy_topic` (set); (2) S14 ships DORMANT — set
+  `DEXPAPRIKA_AUTO_REBALANCE_ENABLED=true` + `execute arm` only after the shadow→measure→tune
+  step. Capital-optimal rollout: let S14 journal shadow decisions, tune params from data,
+  THEN enable live auto-rebalance.
+- **Git: push to origin BLOCKED mid-session** (git proxy: repo dropped from the session's
+  authorized set). Local main is ahead of origin/main by the S13+S14 commits + tags
+  s13-complete/s14-complete — pending re-authorization (add repo to session sources) or the
+  delivered git bundle. See conversation.
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s13-complete | main tip: the S13 merge (see `git log`)
+- Last completed tag: s14-complete | main tip: the S14 merge (see `git log`).
+  NOTE: local main is AHEAD of origin/main (which is at the S12b merge `ef1df07`) — push
+  blocked by the git proxy (repo not in the session's authorized set). The S13 + S14 commits
+  and tags s13-complete/s14-complete are unpushed pending re-authorization or the git bundle.
 - Remote configured: YES — private GitHub `robanks44/dexpaprika` (PAT in session
   credential store, outside the repo). main + tags pushed.
 
@@ -883,3 +894,35 @@ leave-as-is + monitor.
   all-clear downgrade — the daily digest stays green while flagging rebalance status. If you
   want rebalance-needed to downgrade the digest to "attention" pre-S14, say so.
 - Completed: 2026-08-04 | Tag: `s13-complete`
+
+### S14 — Delta-band rebalance strategy — `complete` (ALL PLANNED SECTIONS DONE)
+- Attempts: 1 (fresh-agent PASS; one defensive robustness fix applied post-verdict)
+- North star (Richard): every decision optimizes for the greatest NET CAPITAL position.
+  Decisions: auto-execute within hard limits; band 7.5% (tune from data, not guess); keep SL.
+  Spec: docs/specs/S14-delta-band.md. Library checked — encyclopedia is a fundamentals course,
+  no rebalance coverage; ground truth = 2026-08-03 decision + VERIFIED_FINDINGS §6.
+- Built (`dexpaprika.strategy.rebalance`): `evaluate` (delta-matched target from analyze();
+  per-run STEP CLAMP so a big gap converges over cycles without ever exceeding
+  max_delta_per_run_usd; gates: band, fresh, min-interval, cost-floor, daily-cap, max-position,
+  bad-price; named blockers); `run` (journals every decision to rebalance_log for net-capital
+  attribution incl. shadow; auto-executes ONLY when warranted AND auto_rebalance_enabled AND
+  --arm, reusing S9 execute_instruction with an auto-approving callback — NO guard bypassed;
+  ntfy notification). CLI `strategy status|rebalance`; migration 0004_rebalance; scheduler
+  `strategy-rebalance` job (inert until enabled); config (auto_rebalance_enabled=False default,
+  rebalance_min_interval_minutes=60, rebalance_min_notional_usd=250, strategy_rebalance_minutes).
+- Capital-optimal rollout: ships DORMANT — shadow → measure → tune → enable. SL untouched.
+- Tests (tests/test_strategy.py, 15, offline): evaluate execute/hold/no-state/bad-price; the
+  per-run clamp; EACH gate blocks independently (stale/cost/interval/daily/max-position); run
+  shadow (unarmed + arm-with-flag-off); auto-execute via S9 pipeline; S9 kill-switch still
+  blocks with auto-enabled+armed; CLI status + dormant rebalance.
+- Fresh-agent gate (MAX scrutiny — auto-executes real money): traced every guard; **explicit
+  finding: NO path to an unintended live trade (flag defaults False + gates the sole execute
+  call) and NO path to a wrong-sized trade (clamp correct-signed + strictly under cap; target
+  from analyze(); dual limits bound notional).** Flagged one pre-existing robustness gap
+  (zero-price → crash in analyze before any trade) → fixed with a bad-price guard + test.
+  **VERDICT: PASS.**
+- Verifier verdict (fresh agent): **460 passed, 4 deselected**; coverage **92.44%** (80%
+  gate); ruff + mypy(strict) clean. **VERDICT: PASS.**
+- Owed before live: enable `auto_rebalance_enabled` + `execute arm` ONLY after the shadow/
+  tune step (capital-optimal). Net-capital attribution data accrues in rebalance_log meanwhile.
+- Completed: 2026-08-04 | Tag: `s14-complete`

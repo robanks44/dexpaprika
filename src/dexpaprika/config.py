@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     # Rebalance band (fraction of max delta) before a hedge adjustment is flagged.
     hedge_rebalance_band: Decimal = Decimal("0.075")
 
+    # --- S14 delta-band rebalance strategy ---
+    # MASTER opt-in for live auto-execution. False → S14 is shadow/propose only, no
+    # matter what else is set (capital-optimal: shadow → measure → tune → enable).
+    auto_rebalance_enabled: bool = False
+    # Anti-churn floor between EXECUTED rebalances (minutes) — starting proxy, tune from data.
+    rebalance_min_interval_minutes: int = 60
+    # Cost floor: don't pay gas+keeper to move a gap smaller than this — starting proxy.
+    rebalance_min_notional_usd: Decimal = Decimal("250")
+    # Cadence of the (opt-in) strategy-rebalance scheduler job.
+    strategy_rebalance_minutes: int = 15
+
     # --- alerts (S8) ---
     # Same rule fired within this window is suppressed (ntfy free-tier etiquette:
     # alert per state-change, never per poll tick).

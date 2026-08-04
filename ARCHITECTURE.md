@@ -204,6 +204,20 @@ dexpaprika quota [--provider ...]     # spend vs budget from api_call_log
 dexpaprika execute ...                # S9 ONLY, separate command; dry-run default
 ```
 
+### 6.4 Delta-band rebalance strategy (S14 — BUILT 2026-08-04, DORMANT by default)
+
+`dexpaprika.strategy.rebalance`: the net-capital-optimizing hedge manager. `evaluate` reads
+the latest recorded state → `hedge.engine.analyze` → delta-matched target, deviation vs the
+7.5% band, and the strategy gates (fresh, min-interval, cost-floor, daily-cap, max-position);
+`run` journals every decision to `rebalance_log` (net-capital attribution; shadow included)
+and, ONLY when warranted AND `auto_rebalance_enabled` AND `--arm`, auto-executes by reusing
+S9's `execute_instruction` with an auto-approving callback — so no S9 guard is bypassed
+(kill-switch, armed, hard limits, audit, post-condition verify, idempotency all fire). A gap
+larger than `max_delta_per_run_usd` is stepped in cap-sized increments so it converges without
+ever exceeding the per-run cap. North star: greatest NET CAPITAL — ships dormant (shadow →
+measure → tune → enable); the SL stays as the backstop. Scheduler job `strategy-rebalance` is
+installed but inert until `auto_rebalance_enabled` is set. Migration 0004 adds `rebalance_log`.
+
 ## 7. Privileged-action safety (S9 — BUILT + live-exercised 2026-08-04, on-chain)
 
 > **UPDATED 2026-08-04 (see PROGRESS.md decision log for full ADRs).**
