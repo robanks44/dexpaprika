@@ -234,16 +234,36 @@ Status legend: `pending` → `in_progress` → `complete` (tracked in PROGRESS.m
   correctness, nonce-safe sequencing, wallet-address == account guard, dry-run parity.
 - **Depends:** S9. **Done:** fresh-agent green; tag.
 
-### S12 — Recorder service + LIVE dashboard
-- **Goal (see 2026-08-04 decision):** persistent local recorder service — DexPaprika SSE
-  (LP ~1s) + GMX REST poll (hedge) → SQLite (WAL) → dashboard served locally + SSE push
-  (browser never polls upstream). Records the FULL raw variable set (S6 must capture it);
-  derived-metrics section computed at query/display time. Honest per-source staleness.
+### S12 — Recorder service + LIVE dashboard  (SPLIT 2026-08-04 into S12a + S12b)
+
+#### S12a — Recorder service + full-variable recording
+- **Goal:** a long-running recorder that captures the FULL raw variable set per snapshot
+  (LP: both token prices, pool price+tick, in/out-range, volume, liquidity, position token
+  amounts, unclaimed fees; hedge: mark/entry/liq, size USD+ETH, collateral, leverage, uPnL,
+  funding+borrowing, SL/stop trigger+size) into SQLite (WAL) — store RAW only, derived
+  metrics computed at read time. A service loop (start/stop, per-source cadence, backoff)
+  PLUS a plain-CLI single-cycle fallback (external scheduler) so correctness never needs the
+  daemon (ENGINEERING_STANDARDS §6). Honest per-source last-updated + staleness stamps.
+- **Depends:** S5 (LP range bounds — RESOLVED), S6 (recording seam), S4 (GMX), S3 (DexPaprika).
+- **References:** python-scheduling--playbook--windows.md (service-at-logon / NSSM);
+  concentrated-liquidity-math--summary.md (raw fields feeding later derived metrics);
+  the 2026-08-04 full-variable decision.
+- **Test focus (offline):** one cycle writes the complete raw row from mocked clients;
+  WAL/readers-don't-block invariants; staleness stamps; service loop terminates on stop +
+  respects cadence with an injected clock; CLI single-cycle == one service cycle.
+- **Done:** fresh-agent green; tag `s12a-complete`.
+
+#### S12b — Live dashboard + SSE push
+- **Goal:** local dashboard reading the SQLite DB (+ recorder's in-memory latest tick),
+  never calling upstream APIs itself; pushes updates to the browser via SSE (one upstream
+  feed → N viewers). Real-time view + historical charts + derived-metrics section (computed
+  at query/display). Per-panel last-updated + staleness warning (a dead stream LOOKS dead).
   Static HTML export demoted to a secondary CLI command.
-- **Depends:** S5 (range bounds for derived metrics), S6 (full-variable recording).
-- **References:** flask--best-practices--production.md; python-scheduling--playbook--windows.md
-  (service-at-logon / NSSM). **Standards amendment DONE (2026-08-04):** ENGINEERING_STANDARDS
-  §6 — daemon required for LIVENESS; correctness stays CLI + external-scheduler achievable.
+- **Depends:** S12a. **References:** flask--best-practices--production.md (evaluate
+  FastAPI/uvicorn/starlette too).
+- **Test focus (offline):** routes render from a seeded DB; SSE emits on new rows; derived
+  metrics match hand-computed values; staleness badge flips on a stale stamp.
+- **Done:** fresh-agent green; tag `s12b-complete`.
 
 ### S13 — External watchdog + daily digest
 - **Goal:** heartbeat to an EXTERNAL dead-man's-switch (e.g. healthchecks.io free tier —
