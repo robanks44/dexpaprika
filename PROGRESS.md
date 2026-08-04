@@ -7,15 +7,18 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: S7 complete — next: S8 reporting & alerts (ntfy)
-- Last updated: 2026-08-02
-- Blockers: none (open items below are not blockers for S1–S5)
+- Current section: core build S0–S11 complete; S9 hedge execution PIVOTED to on-chain
+  GmxSdk + LIVE-EXERCISED (2026-08-04); S9.6 on-chain executor verified (fresh-agent PASS).
+  Next planned: S12 recorder + live dashboard, S13 external watchdog + digest, S14
+  delta-band rebalance (all gated on S5 range-bounds custody blocker) — see SECTION_PLAN.
+- Last updated: 2026-08-04
+- Blockers: none. Owed: ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment (S12).
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s7-complete | main tip at last update: the s7 merge commit (see `git log`)
-- Remote configured: no — Richard approved a private GitHub remote (setup Step 1e);
-  waiting on his fine-grained PAT. Configure remote + push immediately when it lands.
+- Last completed tag: s9.6-complete | main tip: the s9.6 PROGRESS commit (see `git log`)
+- Remote configured: YES — private GitHub `robanks44/dexpaprika` (PAT in session
+  credential store, outside the repo). main + tags pushed.
 
 ## Setup phase checklist (from SETUP_PROMPT.txt)
 
