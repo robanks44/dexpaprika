@@ -646,18 +646,33 @@ def _cmd_recorder(args: argparse.Namespace, *, as_json: bool) -> int:
     if args.recorder_command == "status":
         conn = connect(path)
         try:
+            # Staleness is measured from the last GOOD (ok=1) heartbeat, while `ok`
+            # reflects the latest attempt — a failing source shows its stale
+            # last-good time, never a fresh one (honest staleness, ENGINEERING §2).
             rows = conn.execute(
-                "SELECT kind, ts, ok, block FROM recorder_heartbeat h"
-                " WHERE h.id = (SELECT MAX(id) FROM recorder_heartbeat WHERE kind = h.kind)"
-                " ORDER BY kind"
+                "SELECT k.kind,"
+                " (SELECT ts FROM recorder_heartbeat WHERE kind=k.kind ORDER BY id DESC LIMIT 1)"
+                "   AS last_ts,"
+                " (SELECT ok FROM recorder_heartbeat WHERE kind=k.kind ORDER BY id DESC LIMIT 1)"
+                "   AS last_ok,"
+                " (SELECT ts FROM recorder_heartbeat WHERE kind=k.kind AND ok=1"
+                "   ORDER BY id DESC LIMIT 1) AS good_ts,"
+                " (SELECT block FROM recorder_heartbeat WHERE kind=k.kind AND ok=1"
+                "   ORDER BY id DESC LIMIT 1) AS good_block"
+                " FROM (SELECT DISTINCT kind FROM recorder_heartbeat) k ORDER BY k.kind"
             ).fetchall()
             now = datetime.now(UTC)
             sources = {
                 r["kind"]: {
-                    "ts": r["ts"],
-                    "ok": bool(r["ok"]),
-                    "block": r["block"],
-                    "staleness_seconds": (now - datetime.fromisoformat(r["ts"])).total_seconds(),
+                    "ok": bool(r["last_ok"]),
+                    "last_attempt_ts": r["last_ts"],
+                    "last_ok_ts": r["good_ts"],
+                    "block": r["good_block"],
+                    "staleness_seconds": (
+                        (now - datetime.fromisoformat(r["good_ts"])).total_seconds()
+                        if r["good_ts"]
+                        else None
+                    ),
                 }
                 for r in rows
             }

@@ -328,7 +328,30 @@ def test_failed_source_retries_on_backoff_and_loop_survives(conn: sqlite3.Connec
 def test_status_staleness_grows_and_failed_source_keeps_stale_stamp(
     conn: sqlite3.Connection,
 ) -> None:
-    _calls, fake = _fake_cycle_calls()
+    seq = {"n": 0}
+
+    def fake(
+        conn: Any,
+        settings: Any,
+        *,
+        kinds: Any,
+        wallets: Any,
+        btc_wallets: Any,
+        now: datetime,
+        clients: Any,
+    ) -> CycleResult:
+        seq["n"] += 1
+        ok = seq["n"] == 1  # first cycle succeeds; every later cycle fails
+        return CycleResult(
+            ts=now.isoformat(),
+            wallets=[],
+            counts={},
+            sources={
+                k: SourceStamp(ok=ok, ts=now.isoformat(), error=None if ok else "boom")
+                for k in kinds
+            },
+        )
+
     svc = RecorderService(
         conn,
         _settings(),
@@ -339,11 +362,13 @@ def test_status_staleness_grows_and_failed_source_keeps_stale_stamp(
         sleep=lambda _s: None,
         cycle_fn=fake,
     )
-    svc.run(max_cycles=1)  # one lp cycle stamped at T0
-    later = T0 + timedelta(seconds=45)
-    status = svc.status(now=later)
-    assert status.staleness_seconds["lp"] == pytest.approx(45.0)
+    svc.run(max_cycles=3)  # T0 ok, then two failures
+    status = svc.status(now=T0 + timedelta(seconds=45))
+    # latest attempt failed, but the last-GOOD stamp (T0) is retained → staleness
+    # keeps growing from the last good data, never reset to fresh.
+    assert status.sources["lp"].ok is False
     assert status.sources["lp"].ts == T0.isoformat()
+    assert status.staleness_seconds["lp"] == pytest.approx(45.0)
 
 
 # --------------------------- 6. cycle == service tick (equivalence) ---------------------------
@@ -431,3 +456,32 @@ def test_cli_recorder_cycle_status_run(capsys: pytest.CaptureFixture[str], _cli_
     )
     assert code == EXIT_OK
     assert out["cycles"] == 1
+
+
+def test_cli_status_staleness_from_last_good_not_last_attempt(
+    capsys: pytest.CaptureFixture[str], _cli_env: None
+) -> None:
+    from dexpaprika.cli import EXIT_OK
+    from dexpaprika.storage.db import connect, db_path
+
+    _run_cli(capsys, "db", "migrate")
+    path = db_path(Settings.load())
+    good = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    fail = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    c = connect(path)
+    try:
+        c.execute(
+            "INSERT INTO recorder_heartbeat (ts, kind, ok, block, detail_json)"
+            " VALUES (?, 'lp', 1, 123, '{}'), (?, 'lp', 0, NULL, '{}')",
+            (good, fail),
+        )
+    finally:
+        c.close()
+    code, out = _run_cli(capsys, "recorder", "status")
+    assert code == EXIT_OK
+    lp = out["sources"]["lp"]
+    assert lp["ok"] is False  # latest attempt failed
+    assert lp["last_ok_ts"] == good  # staleness anchored to last GOOD, not the failure
+    assert lp["last_attempt_ts"] == fail
+    assert lp["block"] == 123
+    assert lp["staleness_seconds"] > 3600  # ~2h, not ~1min

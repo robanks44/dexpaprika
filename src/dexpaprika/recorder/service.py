@@ -89,11 +89,21 @@ class RecorderService:
 
     def _apply(self, result: CycleResult, now: datetime) -> None:
         for kind, stamp in result.sources.items():
-            self._stamps[kind] = stamp
             if stamp.ok:
+                self._stamps[kind] = stamp
                 self._fail_streak[kind] = 0
                 self._due_at[kind] = now + timedelta(seconds=self._intervals[kind])
             else:
+                # Honest staleness (spec §Behavioural rules): a failed source KEEPS
+                # its previous last-good ts/block and is flagged not-ok — never
+                # re-stamped fresh. Staleness keeps growing from the last good data.
+                prev = self._stamps.get(kind)
+                if prev is not None:
+                    self._stamps[kind] = SourceStamp(
+                        ok=False, ts=prev.ts, block=prev.block, error=stamp.error
+                    )
+                else:
+                    self._stamps[kind] = stamp  # never succeeded — nothing good to keep
                 self._fail_streak[kind] += 1
                 backoff = min(
                     self._max_backoff, self._base_backoff * (2 ** (self._fail_streak[kind] - 1))
