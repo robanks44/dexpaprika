@@ -183,13 +183,19 @@ Status legend: `pending` → `in_progress` → `complete` (tracked in PROGRESS.m
 - **Done:** end-to-end: scheduled monitor detects a synthetic threshold breach and a
   real ntfy message lands on Richard's topic (one live smoke, excluded from gate).
 
-## S9 — Hedge order execution (privileged; BUILD REQUIRES RICHARD'S EXPLICIT GO)
+## S9 — Hedge order execution (privileged) — BUILT + live-exercised 2026-08-04 (on-chain)
+
+> **UPDATED 2026-08-04:** built and exercised live. Write path is **on-chain GmxSdk
+> (Classic)**, not express/subaccount (GMX frontend-only — see PROGRESS decision log).
+> Sidecar `executor/gmx_exec_onchain.cjs`; `gmx_wallet_key` secret; move-SL =
+> create-new-then-cancel-old. **OWED:** tests-first + fresh-agent verification of the
+> on-chain sidecar write path (see S9.6 below); the 40 Python safeguard tests still pass.
 
 - **Goal:** ARCHITECTURE §7 in full: `execute` command (separate scope), dry-run
   default, `--arm` + armed-state file, non-agent-overridable kill switch, hard limits
   pre-client, idempotency keys, audit-before-attempt, ntfy approval flow (action
-  buttons + polling), typed GMX write path (REST/on-chain; community Python SDK as
-  reference only).
+  buttons + polling), GMX write path — **realized as an on-chain Node sidecar over the
+  official `@gmx-io/sdk` `GmxSdk`** (cancel-and-recreate for SL edits).
 - **Depends:** S7, S8 + **Richard's go-ahead recorded in PROGRESS.md**.
 - **References:** gmx-python-sdk--api-reference.md; APIDOCS gmx api/contracts;
   ntfy--api-reference.md; OWASP Agentic Top 10 2026 (read official doc at build).
@@ -220,7 +226,38 @@ Status legend: `pending` → `in_progress` → `complete` (tracked in PROGRESS.m
 - **Done:** same artifact green locally and in container; migration rehearsed;
   RUNBOOK updated.
 
+## New sections (added 2026-08-04 from the founding decision log; not yet built)
+
+### S9.6 — On-chain executor verification (OWED)
+- **Goal:** tests-first + fresh-agent verification of `executor/gmx_exec_onchain.cjs`
+  (read/prepare/submit; set-sl-trigger create-new→cancel-old; cancel-order): scale/clone
+  correctness, nonce-safe sequencing, wallet-address == account guard, dry-run parity.
+- **Depends:** S9. **Done:** fresh-agent green; tag.
+
+### S12 — Recorder service + LIVE dashboard
+- **Goal (see 2026-08-04 decision):** persistent local recorder service — DexPaprika SSE
+  (LP ~1s) + GMX REST poll (hedge) → SQLite (WAL) → dashboard served locally + SSE push
+  (browser never polls upstream). Records the FULL raw variable set (S6 must capture it);
+  derived-metrics section computed at query/display time. Honest per-source staleness.
+  Static HTML export demoted to a secondary CLI command.
+- **Depends:** S5 (range bounds for derived metrics), S6 (full-variable recording).
+- **References:** flask--best-practices--production.md; python-scheduling--playbook--windows.md
+  (service-at-logon / NSSM). **Standards amendment owed:** ENGINEERING_STANDARDS §6 — daemon
+  required for LIVENESS; correctness stays CLI + external-scheduler achievable.
+
+### S13 — External watchdog + daily digest
+- **Goal:** heartbeat to an EXTERNAL dead-man's-switch (e.g. healthchecks.io free tier —
+  NOT on the watched machine); silence self-alerts; daily "all is well" position digest to
+  ntfy (replaces the once-daily manual check). **Depends:** S8, S12.
+
+### S14 — Delta-band rebalance hedge strategy
+- **Goal:** replace the SL ladder with delta-matched rebalancing — resize the GMX short to
+  track live LP ETH exposure; rebalance on delta drift, not price. Uses S9 execution.
+- **Depends:** S5 (live tickLower/tickUpper — the §0.1(a) custody blocker), S7, S9.
+- **Interim until then:** keep SL, widened toward the 2%-of-capital cap (2026-08-03 decision).
+
 ---
 
 **Open items feeding this plan** (tracked in PROGRESS.md): BTC + Solana addresses
-(blocks S5.5); GitHub PAT (remote push, any section); S9 build go-ahead (gate on S9).
+(blocks S5.5); GitHub PAT (remote push, any section); S9 build go-ahead (gate on S9);
+S5 range-bounds custody blocker (gates S12 derived metrics + S14).

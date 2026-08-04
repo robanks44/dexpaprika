@@ -204,9 +204,27 @@ dexpaprika quota [--provider ...]     # spend vs budget from api_call_log
 dexpaprika execute ...                # S9 ONLY, separate command; dry-run default
 ```
 
-## 7. Privileged-action safety (S9 design; build gated on Richard's go-ahead)
+## 7. Privileged-action safety (S9 — BUILT + live-exercised 2026-08-04, on-chain)
 
-Per ENGINEERING_STANDARDS §4, designed now so earlier sections leave the right seams:
+> **UPDATED 2026-08-04 (see PROGRESS.md decision log for full ADRs).**
+> **Execution mechanism = on-chain GmxSdk ("Classic"), NOT express/subaccount relay.**
+> GMX exposes express/gasless/One-Click subaccount orders to its frontend only (confirmed
+> in GMX's agent docs) — that path is a dead end for automation (relay-router migration,
+> stranded subaccount, fee-token rejection). The executor now signs each tx with the
+> account wallet (`gmx_wallet_key`, submit-only) and pays ETH gas + keeper fee. Orders are
+> **cancel-and-recreate** (GMX can't modify an order): move-SL = create a new
+> StopLossDecrease at the new trigger, wait for it to mine (nonce), then cancel the old.
+> Sidecar `executor/gmx_exec_onchain.cjs`; endpoints RPC `arb1.arbitrum.io/rpc`, oracle
+> `arbitrum-api.gmxinfra.io`, subsquid `gmx.squids.live/…arbitrum`. Live-verified: SL
+> $1,900→$1,901 through arm → phone approval → submit → post-condition verify.
+> **Owed:** tests-first + fresh-agent verification of the on-chain sidecar path
+> (the 40 Python safeguard tests still hold; the Node write path is not yet TDD-covered).
+> Also newly required (2026-08-04 decisions, not yet built): a persistent recorder service
+> + LIVE dashboard, an EXTERNAL dead-man's-switch heartbeat + daily ntfy digest, and the
+> delta-band rebalance hedge strategy (replaces the SL ladder once S5 range-bounds land).
+
+Per ENGINEERING_STANDARDS §4, designed now so earlier sections leave the right seams
+(all safeguards below remain in force; only the venue write-path changed to on-chain):
 
 - `--dry-run` default; live requires `--arm` AND an armed-state file created in a
   separate step. Kill-switch file **outside the agent-writable data dir** (Richard's
@@ -222,9 +240,10 @@ Per ENGINEERING_STANDARDS §4, designed now so earlier sections leave the right 
 - Approval gate: ntfy action buttons + poll-based approval; confirmation is
   substantive (agent restates reasoning + data), never a bare "yes".
 - OWASP Agentic Top 10 (2026) review is part of S9's done-criteria.
-- Write path: GMX has NO official Python SDK (official is TypeScript). Plan: typed
-  REST/on-chain client informed by `reference\gmx-python-sdk--api-reference.md`
-  (community SDK as reference only, not a dependency).
+- Write path (REALIZED 2026-08-04): a pinned Node sidecar over the official TypeScript
+  `@gmx-io/sdk` `GmxSdk` (on-chain Classic mode) — Python owns every safeguard and shells
+  out to the dumb sidecar for prepare/submit only. (Original plan was a typed REST/on-chain
+  Python client; the Node sidecar reuses GMX's own SDK for order construction + signing.)
 
 ## 8. Cloud migration path
 

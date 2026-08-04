@@ -109,6 +109,94 @@
   a zip snapshot is delivered to Richard's project folder at setup handoff | .git object
   trees don't transfer cleanly file-by-file over the device bridge | committing .git piecemeal
 
+<!-- Entries below reconciled 2026-08-04 from the FOUNDING dexpaprika-loop copy (authored
+     before that session knew this repo existed). The founding copy is now DEPRECATED;
+     this repo's PROGRESS.md + loop/ are the single live state. -->
+
+### 2026-08-03 — Target hedge strategy: delta-matched rebalance bands (no SL); interim SL-ladder widening until custody blocker clears
+**Decision:** move hedge management from the tight-SL/re-arm ladder toward **delta-matched
+rebalancing** — resize the GMX short periodically to track the LP's actual ETH exposure
+(swings ~0–9.01 ETH across the range per VERIFIED_FINDINGS §6), not a fixed entry-sized
+short. No stop-loss once live; rebalance triggers on delta drift, not price level.
+**Why:** trade-history.csv (2026-02-02→2026-07-31, 178 d) shows the SL-ladder net **-$333.84**:
+9 stop-loss hits averaging **-$282.09** (~1 / 19.8 d) + $603.89 fees over 38 entry/exit
+events, only partly offset by +$2,808.85 from 11 manual profit-takes. Confirms the §6
+concern: the SL trigger sits near where LP delta → 0 (top-of-range exit), so a stop-out and
+"LP fully converted to USDC" are the same ETH rally — SL fires → short gone → price reverts →
+LP re-enters band unhedged.
+**Blocker:** needs live LP range bounds (tickLower/tickUpper) → REFERENCE_INDEX §0.1(a)
+custody is S5's first job; strategy can't ship before it clears.
+**Interim:** keep SL but widen toward the strategy doc's own "max 2% of total capital" cap
+(≈3.5% above entry at current sizing) — not past it. Structural fix is the delta band, not
+the stop distance.
+**Alternatives rejected:** Deribit puts (premium unverified; adds a second custody chain);
+formalize-SL-ladder-only (doesn't fix the correlated failure mode — adopted only as interim).
+
+### 2026-08-04 — Full-variable time-series DB + LIVE dashboard with derived-metrics section
+**Decision:** record EVERY raw variable per snapshot; serve a dashboard with (1) real-time
+latest view, (2) historical charts, (3) derived-metrics computed from raw values.
+Raw per snapshot — *LP:* both token prices, pool price+tick, in/out-of-range, volume,
+liquidity, position token amounts, unclaimed fees/rewards. *Hedge:* mark/entry/liq price,
+size (USD+ETH), collateral/margin, leverage, uPnL, funding+borrowing fees, SL/stop order
+(trigger + size; `sizeDeltaUsd`=uint256-max ⇒ full-close, trigger ÷1e12 for ETH).
+Derived (query/display-time only, from raw + range bounds): hedge ratio, net delta (ETH/USD),
+distance-to-SL %, distance-to-liq %, in-range % + distance to each bound, fees-vs-IL,
+funding run-rate, combined LP+hedge PnL.
+**AMENDED — LIVE, not regenerate-on-run:** a persistent local **recorder service** that
+(a) subscribes to DexPaprika SSE for LP prices/reserves (~1s), (b) fast-polls GMX REST for
+the hedge (start ~5–10s + backoff), (c) writes every datapoint to SQLite (WAL), (d) serves
+the dashboard + pushes updates via SSE (browser never polls upstream). Honest per-source
+staleness labels (a dead stream must LOOK dead). Static HTML export demoted to a secondary
+CLI command. Dashboard PULL; ntfy stays PUSH; recorder is also the alert engine's home.
+**Standards note:** ENGINEERING_STANDARDS §6 "no in-process daemon required for correctness"
+needs a clarifying amendment — the daemon is required for LIVENESS (dashboard/alerts), while
+correctness (recording, healthcheck, backfill) stays achievable via CLI + external scheduler
+as the gap-filling fallback. **Impact:** S6 must capture the full variable set; SECTION_PLAN
+needs recorder-service + live-dashboard as explicit sections (Windows service lifecycle);
+derived metrics depend on range bounds → after S5 custody.
+
+### 2026-08-04 — Operating philosophy + baseline context + external watchdog requirement
+**Operating philosophy (binding on all strategy/system changes):** ship the best FIRST
+version then improve ONE change at a time; every change records its THESIS (why, expected
+effect) in this log BEFORE going live, then is judged from recorded data; the early phase is
+an explicit LEARNING phase — the experiment journal (thesis → data → verdict) is a first-class
+system output; the dashboard's job is to make "how is it working out" answerable at a glance.
+**Baseline (recorded 2026-08-04):** Richard previously managed positions ONCE PER DAY →
+blind window shrinks 24h → seconds/minutes, so sub-minute latency is immaterial vs baseline
+and 80% uptime ≫ one check/day (disable-sleep + auto-restart suffice pre-VPS); tight SLs were
+the de-facto intraday babysitter (9 stop-outs/178 d) — with minutes-scale alerts the SL
+returns to backstop role.
+**NEW top risk — silent failure / automation complacency:** once alerts replace the daily
+check, a dead recorder = nobody watching, worse than baseline. REQUIREMENTS (not options):
+(1) heartbeat to an EXTERNAL dead-man's-switch (e.g. healthchecks.io free tier — must NOT
+live on the watched machine); silence self-alerts. (2) a daily "all is well" position digest
+to ntfy, replacing the old check-in ritual. Unchanged: no-backfill → start recording as
+early as build order allows (recording before dashboard).
+
+### 2026-08-04 — S9 execution pivot: express/subaccount → on-chain GmxSdk (Classic); live-verified
+**Decision:** the S9 hedge-order executor moves from GMX express/gasless subaccount relay to
+the supported **on-chain GmxSdk ("Classic")** path — the wallet signs each tx and pays ETH
+gas + keeper fee. Order edits are **cancel-and-recreate** (GMX orders can't be modified):
+move-SL = create a new StopLossDecrease at the new trigger, then cancel the old (new-before-
+old; wait for the create to mine so nonces don't collide).
+**Why:** GMX's own agent docs state express / One-Click subaccount orders are **frontend-only,
+not exposed to the SDK**. Chasing that path hit an unfixable wall (relay-router migration:
+live SubaccountGelatoRelayRouter `0x5176…1273` vs deprecated `0xfD05…a67f`; `UnsupportedRelayFeeToken`;
+a stored One-Click approval that validates against no router; the subaccount stranded on the
+old on-chain SubaccountRouter, `active:false`). All GMX-side, unfixable client-side.
+**Live-verified 2026-08-04:** created a $1,901 SL and cancelled the old $1,900 on Arbitrum
+through the full armed → phone-approved → submit → post-condition-verify pipeline (audit ids
+59–71); web app confirmed. New secret `gmx_wallet_key` (submit-only); sidecar
+`executor/gmx_exec_onchain.cjs`; config endpoints RPC `arb1.arbitrum.io/rpc`, oracle
+`arbitrum-api.gmxinfra.io`, subsquid `gmx.squids.live/…arbitrum`. Full write-up:
+CONTEXT_inbox `gmx-v2-programmatic-order-execution--reference.md`.
+**Cost/caveat:** uses the wallet key in the executor (the subaccount design was meant to
+avoid it) + real gas; cancel-and-recreate leaves a sub-block window with two SLs, never zero.
+Reconcile into ARCHITECTURE/SECTION_PLAN; tests-first + fresh-agent verification still owed.
+**Alternatives rejected:** upgrade to @gmx-io/sdk 2.0.0-alpha (no express subaccount API at
+all); drive the web app via browser automation (its own One-Click is broken mid-migration);
+pause until GMX finishes migrating (indefinite; on-chain path works today).
+
 ### S1 — Config, secrets & wallet registry — `complete`
 - Attempts: 1
 - Branch: `section/s1-config-secrets-wallets` | Merge commit: — | Tag: —
@@ -513,8 +601,18 @@
 - Completed: 2026-08-02
 - Deferred: Solana client — new section when Richard provides the address
 
-### S9 — Hedge order execution (PRIVILEGED) — `complete` (armed path UNEXERCISED — supervised session pending)
+### S9 — Hedge order execution (PRIVILEGED) — `complete` (armed path LIVE-EXERCISED 2026-08-04, on-chain)
 - Attempts: 1
+- **PIVOT 2026-08-04 (see Decision log):** execution mechanism changed from the
+  express/subaccount relay (GMX frontend-only, unfixable mid-migration) to the
+  supported **on-chain GmxSdk (Classic)** path. Sidecar `executor/gmx_exec_onchain.cjs`
+  (read/prepare/submit; actions set-sl-trigger + cancel-order); secret `gmx_wallet_key`
+  (submit-only); move-SL = create new StopLossDecrease → wait for nonce → cancel old.
+  ALL S9 safeguards unchanged (dry-run, arm, ntfy approval, kill-switch, hard limits,
+  audit chain, post-condition auto-trip). The 40 safeguard tests below still hold; the
+  on-chain sidecar path itself is NOT yet under tests-first / fresh-agent verification —
+  **OWED** (tracked as a follow-up section). Live proof: SL $1,900→$1,901 on Arbitrum,
+  armed → phone-approved → submitted → verified (audit ids 59–71).
 - Branch: `section/s9-execution` | Merge commit: — | Tag: —
 - GO-AHEAD RECORDED: Richard, "start s9", 2026-08-02. Decisions: subaccount +
   official-SDK sidecar custody (research-backed; community Python SDK rejected
