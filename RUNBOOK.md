@@ -188,6 +188,32 @@ dexpaprika report --json
   closed) — this is the alertable state S8 watches.
 - Holdings show amounts only (pricing joins in S7/S8).
 
+## Recorder — full-variable service (S12a)
+
+```
+dexpaprika recorder cycle  [--kind lp|hedge|defi|holdings|all] [--address 0x...] --json
+dexpaprika recorder run    [--kind ...] [--lp-interval S] [--hedge-interval S] [--max-cycles N] --json
+dexpaprika recorder status --json
+```
+
+- `recorder cycle` is one recording cycle — the SAME rows as `snapshot`, and the
+  correctness fallback: a series of scheduled `cycle` calls == one `run`. It is
+  resilient (per-source isolation): a failed source is stamped not-ok and heart-
+  beated, never aborting the others, so it exits 0 with an `ok` flag. (`snapshot`
+  keeps the fail-hard contract — any failed source → nonzero exit — use it when
+  you want all-or-nothing.)
+- `recorder run` is the long-running service (foreground; a Windows service/NSSM
+  or scheduled-at-logon task wraps it). Each source runs on its own cadence
+  (`--lp-interval`, `--hedge-interval`); a failed source retries on capped
+  exponential backoff. `--max-cycles` bounds it for test and smoke runs.
+- `recorder status` shows the last cycle per source with staleness seconds +
+  heartbeat age (from the `recorder_heartbeat` table). Staleness is honest — a
+  failed source keeps its previous stamp, flagged not-ok.
+- Full-variable capture (S12a): LP state also carries both token USD prices and
+  the pool's 24h volume (DexPaprika, null-with-reason when absent); the hedge
+  state carries the SL order size alongside its trigger. Storage is RAW only —
+  derived metrics are a read-time concern (the S12b dashboard).
+
 ## Hedge analysis (S7 — read-only)
 
 ```
