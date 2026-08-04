@@ -10,7 +10,8 @@
 - Current section: core build S0–S11 complete; S9 hedge execution PIVOTED to on-chain
   GmxSdk + LIVE-EXERCISED (2026-08-04); S9.6 on-chain executor verified (fresh-agent PASS).
   Next planned: S12 recorder + live dashboard, S13 external watchdog + digest, S14
-  delta-band rebalance (all gated on S5 range-bounds custody blocker) — see SECTION_PLAN.
+  delta-band rebalance. **S5 range-bounds custody blocker RESOLVED (probe-verified live
+  2026-08-04)** — S12 metrics + S14 now unblocked. See SECTION_PLAN.
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
@@ -94,6 +95,14 @@
   additions (BTC Esplora, Solana RPC) covered by library docs verified 2026-08-01. | CONTEXT library
 - 2026-08-02 | School material | encylopedia Uig accessible (19 files, 4.x + 5.x + criteria
   + tools); reconciliation deferred to S7 per REFERENCE_INDEX §2. | device folder listing
+- 2026-08-04 | LP custody blocker (§0.1a) **RESOLVED — probe-verified live** | The
+  general discovery mechanism (Sickle custodian → both Slipstream deployments' NFPM
+  balanceOf → positions(tokenId) → pool) is implemented (S5) and re-confirmed live via
+  `dexpaprika lp snapshot`: NFT #5056427 on the 2nd deployment (nfpm 0xa990c6a7…, pool
+  0x56aeaf4a…), ticks −202000/−200000 ($1,689–$2,063), pool tick −201069 (~$1,854) IN
+  RANGE, 4.82 WETH + 7,809 USDC, no warnings. **Unblocks S12 derived metrics + S14
+  delta-band** (live range bounds now readable). Evidence: probes/out/s5/discovery.json +
+  discovery_live_2026-08-04.json | live Base RPC probe (block 49,524,786)
 
 ## Decision log (ADR-lite)
 

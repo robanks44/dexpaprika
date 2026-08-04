@@ -70,8 +70,20 @@ on Base** — never hardcode a single NFPM address; (2) the gauge recipe is a va
 NOT the only one, and it is not the one that applies here; (3) `NFPM.balanceOf(wallet)`
 returns **0** for this position, so **any enumeration built on "NFTs the wallet owns" will
 find nothing.** Identify `0x6c1b2006…`'s implementation (it is a proxy — read its
-implementation slot) before designing LP discovery. **This is still an open design
-question; treat it as the first thing S5 must resolve, and probe before coding.**
+implementation slot) before designing LP discovery. ~~This is still an open design
+question; treat it as the first thing S5 must resolve, and probe before coding.~~
+
+> **✅ RESOLVED 2026-08-04 (S5, probe-verified live).** The general discovery mechanism:
+> `SickleFactory.sickles(wallet)` → the Sickle custodian (verify `owner()==wallet`); then
+> check `NFPM.balanceOf(sickle)` on BOTH Slipstream deployments (canonical factory
+> `0x5e7bb104…` NFPM `0x8279…`; **second** factory `0xade65c38…` NFPM `0xa990c6a7…`); the
+> live position sits on the SECOND deployment, owned by the Sickle; read
+> `NFPM.positions(tokenId)` → token0/token1/ticks/liquidity; resolve the pool from
+> (factory, tokens, tickSpacing). Implemented in S5 (`src/…/lp`), re-verified live
+> 2026-08-04 via `dexpaprika lp snapshot`: NFT #5056427, ticks −202000/−200000
+> ($1,689–$2,063), pool tick −201069 (~$1,854) IN RANGE, 4.82 WETH + 7,809 USDC.
+> Evidence: `probes/out/s5/discovery.json` + `probes/out/s5/discovery_live_2026-08-04.json`.
+> Enumeration must go through the Sickle custodian, NOT wallet NFT ownership (still 0).
 
 **(b) Zerion requires the undocumented `sync=true` or it serves silently stale data.**
 Same endpoint, same wallet, seconds apart: cached returned **2 positions / $16,155**;

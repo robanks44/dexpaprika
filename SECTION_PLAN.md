@@ -260,4 +260,5 @@ Status legend: `pending` → `in_progress` → `complete` (tracked in PROGRESS.m
 
 **Open items feeding this plan** (tracked in PROGRESS.md): BTC + Solana addresses
 (blocks S5.5); GitHub PAT (remote push, any section); S9 build go-ahead (gate on S9);
-S5 range-bounds custody blocker (gates S12 derived metrics + S14).
+S5 range-bounds custody blocker **RESOLVED 2026-08-04** (probe-verified live; S12
+metrics + S14 unblocked).
