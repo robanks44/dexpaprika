@@ -117,10 +117,23 @@ function planPreview(target, newPriceStr, decreaseAmounts) {
   };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// After a write, wait until the account nonce advances so the next tx doesn't
+// collide (Arbitrum: usually a couple of seconds). Returns true if it advanced.
+async function waitNonceAdvance(sdk, addr, nonceBefore, tries = 30) {
+  for (let i = 0; i < tries; i++) {
+    const n = await sdk.publicClient.getTransactionCount({ address: addr });
+    if (n > nonceBefore) return true;
+    await sleep(2000);
+  }
+  return false;
+}
+
 async function handle(payload) {
   const action = payload.action;
-  if (action !== "set-sl-trigger" && payload.mode !== "read") {
-    return { ok: false, error: `on-chain sidecar: action ${action} not enabled (only set-sl-trigger)` };
+  if (!["set-sl-trigger", "cancel-order"].includes(action) && payload.mode !== "read") {
+    return { ok: false, error: `on-chain sidecar: action ${action} not enabled` };
   }
 
   if (payload.mode === "read") {
@@ -134,21 +147,35 @@ async function handle(payload) {
     const { marketsInfoData, tokensData, orders } = await loadOrders(sdk);
     const target = findOrder(orders, payload.params.order_key);
     if (!target) return { ok: false, error: `order ${payload.params.order_key} not found` };
+    if (action === "cancel-order") {
+      return {
+        ok: true,
+        plan: { action: "cancel-order", order_key: target.key, trigger_usd: summarize(target).trigger_usd },
+      };
+    }
     const { decreaseAmounts } = buildDecreasePlan(target, payload.params.trigger_price, marketsInfoData, tokensData);
     return { ok: true, plan: planPreview(target, payload.params.trigger_price, decreaseAmounts) };
   }
 
   if (payload.mode === "submit") {
     const sdk = makeSdk({ withWallet: true });
+    const addr = sdk.account;
     const { marketsInfoData, tokensData, orders } = await loadOrders(sdk);
     const target = findOrder(orders, payload.params.order_key);
     if (!target) return { ok: false, error: `order ${payload.params.order_key} not found` };
+
+    if (action === "cancel-order") {
+      await sdk.orders.cancelOrders([target.key]);
+      return { ok: true, cancelled: target.key, note: "cancel order submitted on-chain" };
+    }
+
     const { marketInfo, collateralToken, decreaseAmounts } = buildDecreasePlan(
       target, payload.params.trigger_price, marketsInfoData, tokensData
     );
 
     // 1) Create the NEW stop-loss at the new trigger (position now has old+new).
-    const created = await sdk.orders.createDecreaseOrder({
+    const nonceBefore = await sdk.publicClient.getTransactionCount({ address: addr });
+    await sdk.orders.createDecreaseOrder({
       marketsInfoData,
       tokensData,
       marketInfo,
@@ -160,24 +187,31 @@ async function handle(payload) {
       isTrigger: true,
     });
 
-    // 2) Cancel the OLD order only after the new one is created.
-    let cancelled = null;
+    // 2) Wait for the create to mine (nonce advances) BEFORE cancelling the old
+    // order, so the two writes never share a nonce.
+    const advanced = await waitNonceAdvance(sdk, addr, nonceBefore);
+    let cancelled = false;
     let cancelError = null;
-    try {
-      cancelled = await sdk.orders.cancelOrders([target.key]);
-    } catch (e) {
-      cancelError = String((e && e.message) || e).slice(0, 300);
+    if (!advanced) {
+      cancelError = "create tx did not confirm within ~60s — old order left in place";
+    } else {
+      try {
+        await sdk.orders.cancelOrders([target.key]);
+        cancelled = true;
+      } catch (e) {
+        cancelError = String((e && e.message) || e).slice(0, 300);
+      }
     }
 
     return {
       ok: true,
-      created: created?.hash || created?.transactionHash || String(created ?? "sent"),
-      old_order_cancelled: cancelled ? (cancelled?.hash || "sent") : false,
+      created: "sent",
+      old_order_cancelled: cancelled,
       cancel_error: cancelError,
       new_trigger_usd: Number(payload.params.trigger_price),
-      note: cancelError
-        ? "NEW SL created but OLD cancel failed — position has TWO stop-losses; cancel the old one manually."
-        : "moved: new SL created, old SL cancelled",
+      note: cancelled
+        ? "moved: new SL created, old SL cancelled"
+        : "NEW SL created but OLD not cancelled — position has TWO stop-losses; run `execute cancel-order --key <old> --arm` or cancel in the GMX app.",
     };
   }
 
