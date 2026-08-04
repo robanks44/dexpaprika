@@ -12,7 +12,7 @@
   Next planned: S12 recorder + live dashboard, S13 external watchdog + digest, S14
   delta-band rebalance (all gated on S5 range-bounds custody blocker) — see SECTION_PLAN.
 - Last updated: 2026-08-04
-- Blockers: none. Owed: ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment (S12).
+- Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 

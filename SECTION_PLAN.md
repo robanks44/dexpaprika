@@ -242,8 +242,8 @@ Status legend: `pending` → `in_progress` → `complete` (tracked in PROGRESS.m
   Static HTML export demoted to a secondary CLI command.
 - **Depends:** S5 (range bounds for derived metrics), S6 (full-variable recording).
 - **References:** flask--best-practices--production.md; python-scheduling--playbook--windows.md
-  (service-at-logon / NSSM). **Standards amendment owed:** ENGINEERING_STANDARDS §6 — daemon
-  required for LIVENESS; correctness stays CLI + external-scheduler achievable.
+  (service-at-logon / NSSM). **Standards amendment DONE (2026-08-04):** ENGINEERING_STANDARDS
+  §6 — daemon required for LIVENESS; correctness stays CLI + external-scheduler achievable.
 
 ### S13 — External watchdog + daily digest
 - **Goal:** heartbeat to an EXTERNAL dead-man's-switch (e.g. healthchecks.io free tier —

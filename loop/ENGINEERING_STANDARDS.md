@@ -168,8 +168,15 @@ If and only if scope includes changing the GMX position programmatically:
   parity; documented TimescaleDB/Postgres migration path for the time-series tables
   (`reference\timescaledb--api-reference--lp-tracker.md`).
 - Scheduling is externalized (Task Scheduler / cron / cloud scheduler calls the CLI) — no
-  in-process daemon required for correctness. See
+  in-process daemon required for **correctness**. See
   `reference\python-scheduling--playbook--windows.md`.
+- **Amendment 2026-08-04 (daemon vs correctness):** a long-running **recorder service**
+  IS required for **liveness** — the live dashboard's real-time view and the tick-driven
+  alert engine (S12/S13) exist only while it runs. This does NOT relax the rule above:
+  **correctness** (recording, healthcheck, backfill) must stay achievable via plain CLI +
+  external scheduler, which is the gap-filling fallback when the service is down. Net:
+  the daemon buys liveness; scheduled CLI snapshots remain the correctness backstop. A
+  dead recorder must be caught by the EXTERNAL dead-man's-switch (S13), never fail silent.
 
 ## 7. Version control
 
