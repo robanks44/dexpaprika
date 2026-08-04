@@ -214,6 +214,29 @@ dexpaprika recorder status --json
   state carries the SL order size alongside its trigger. Storage is RAW only —
   derived metrics are a read-time concern (the S12b dashboard).
 
+## Dashboard — live view + SSE (S12b)
+
+```
+dexpaprika dashboard serve  [--host 127.0.0.1] [--port 8787]
+dexpaprika dashboard export [--out FILE]
+```
+
+- `dashboard serve` runs a LOCAL, READ-ONLY server on 127.0.0.1. It reads only the
+  SQLite DB the recorder writes and **never calls upstream** — a viewer refresh
+  cannot trigger an API call. Live updates push to the browser via SSE (`/events`),
+  triggered by a local DB watch (new `snapshots` row), so one local feed serves N
+  viewers. Routes: `/` (dashboard), `/api/latest`, `/api/history`, `/api/derived`,
+  `/events`, `/static/echarts.min.js`. Typically launched beside `recorder run`.
+- Panels: derived-metric KPI tiles + gauges (distance-to-SL, distance-to-floor,
+  in-range position — reusing `hedge.engine.analyze`), time-series charts (price,
+  hedge size, pool volume, funding), and per-source raw tables. Every panel shows
+  its source's staleness; a dead source LOOKS dead (badge flips past ~5 min).
+- `dashboard export` writes ONE self-contained HTML snapshot (`<data_dir>/dashboard.html`
+  by default): latest + derived + histories inlined, ECharts inlined — opens offline
+  with charts intact, zero external requests. Use it for sharing/archival.
+- Charts use Apache ECharts vendored locally (`dashboard/static/echarts.min.js.gz`,
+  Apache-2.0) — no CDN, zero new Python dependency.
+
 ## Hedge analysis (S7 — read-only)
 
 ```

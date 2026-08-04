@@ -238,6 +238,21 @@ state adds both token USD prices + pool 24h volume (DexPaprika, null-with-reason
 absent); hedge state adds the SL order size beside its trigger. Liveness table
 `recorder_heartbeat` (migration 0003) is append-only; readers never block the writer.
 
+### 6.2 Dashboard (S12b — BUILT 2026-08-04)
+
+`dexpaprika.dashboard`: a LOCAL, read-only view over the recorder's store. Invariant —
+the browser reads this server, the server reads only SQLite, and the SSE trigger is a
+local DB watch (`Broadcaster` fed by `DbWatcher` on new `snapshots` rows); nothing here
+ever calls upstream, so one local feed safely serves N viewers. `app.route` is a pure
+router (unit-tested with zero sockets); `server.py` is a thin stdlib `http.server`
+adapter (chosen over Flask/FastAPI — zero new runtime dep, sync, local single-user).
+Derived metrics are computed at read time — reusing `hedge.engine.analyze` (coverage,
+net delta, distance-to-SL/floor, quadrant, rebalance) plus funding run-rate; a metric
+with missing inputs is null-with-reason (combined-PnL-since-entry is null: LP cost basis
+isn't recorded). Charts use Apache ECharts vendored locally (gzip, served from
+`/static/`; inlined into `dashboard export`) — no CDN, no network at view time. Honest
+per-panel staleness: a dead source looks dead.
+
 Per ENGINEERING_STANDARDS §4, designed now so earlier sections leave the right seams
 (all safeguards below remain in force; only the venue write-path changed to on-chain):
 

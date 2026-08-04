@@ -7,18 +7,18 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: **S12a COMPLETE (tag `s12a-complete`)** — recorder service +
-  full-variable recording; fresh-agent verdict PASS (415 passed, 93.61% cov). Core build
-  S0–S11 complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED
-  (2026-08-04); S9.6 on-chain executor verified (fresh-agent PASS). Next: S12b dashboard,
-  S13 watchdog, S14 delta-band. **S5 range-bounds custody blocker RESOLVED (probe-verified
-  live 2026-08-04)** — S12 metrics + S14 now unblocked. See SECTION_PLAN.
+- Current section: **S12b COMPLETE (tag `s12b-complete`)** — live dashboard + SSE;
+  fresh-agent verdict PASS (432 passed, 92.35% cov). S12a recorder COMPLETE
+  (`s12a-complete`). Core build S0–S11 complete; S9 hedge execution PIVOTED to on-chain
+  GmxSdk + LIVE-EXERCISED (2026-08-04); S9.6 verified. Next: S13 watchdog, S14 delta-band.
+  **S5 range-bounds custody blocker RESOLVED (probe-verified live 2026-08-04)** — S14
+  now unblocked. See SECTION_PLAN.
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
 
 ## Git state (mirror of GIT_RULES.md expectations)
 
-- Last completed tag: s12a-complete | main tip: the S12a merge (see `git log`)
+- Last completed tag: s12b-complete | main tip: the S12b merge (see `git log`)
 - Remote configured: YES — private GitHub `robanks44/dexpaprika` (PAT in session
   credential store, outside the repo). main + tags pushed.
 
@@ -817,3 +817,36 @@ leave-as-is + monitor.
 - Not covered (by design): live network (RPC/GMX/DexPaprika) — offline mocked-client
   tests only, per standards; S12b builds the read-time dashboard over this raw data.
 - Completed: 2026-08-04 | Tag: `s12a-complete`
+
+### S12b — Live dashboard + SSE — `complete`
+- Attempts: 1 (fresh-agent FAIL→fix→PASS on one blocker)
+- Scope: a LOCAL, read-only dashboard over the recorder's store — real-time latest view
+  + historical charts + derived-metrics section, honest per-panel staleness. Spec:
+  docs/specs/S12b-dashboard.md. Framework: stdlib `http.server` (Richard's call — zero new
+  runtime dep, sync). Charts: Apache ECharts 6.1.0 VENDORED locally (gzip, Apache-2.0;
+  Richard's call) — no CDN, no network at view time.
+- Built (`dexpaprika.dashboard`): `read` (latest_view/history/derived — reuses
+  hedge.engine.analyze; whitelisted history fields; funding run-rate; honest staleness);
+  `app.route` (pure router, socket-free unit tests); `server` (Broadcaster SSE fan-out +
+  DbWatcher local-snapshot-row watch + ThreadingHTTPServer adapter w/ Accept-Encoding gzip
+  negotiation); `html` (dark ECharts dashboard, validated palette, gauges + time-series +
+  staleness badges); `export` (standalone snapshot, data + ECharts inlined). CLI
+  `dashboard serve|export`.
+- Core invariant: the browser reads this server, the server reads only SQLite, and the SSE
+  trigger is a LOCAL DB watch — nothing here ever calls upstream (a viewer refresh cannot
+  cause an API call). No fabrication: combined-PnL-since-entry is null-with-reason (LP cost
+  basis not recorded); funding run-rate null when <2 samples.
+- Tests (tests/test_dashboard.py, 17, offline/socket-free): read/history-whitelist/derived/
+  route/gzip-negotiation/Broadcaster/DbWatcher/staleness/export/handler-glue.
+- Render-and-look (dataviz step 7): rendered a seeded export in headless Chromium — caught
+  + fixed 2 JS bugs (address strings coerced via Number("0x…"); range_position_pct double-
+  scaled to 5,810%).
+- Fresh-agent gate: first pass FAILED — `make test` was red because mypy-strict failed on
+  the handler test (`wfile.getvalue()`; base class types wfile as BufferedIOBase). Fixed
+  (drive handler through a typed io.BytesIO) + closed DbWatcher connections (verifier note).
+  Re-verify VERDICT: PASS.
+- Verifier verdict (fresh agent): **432 passed, 4 deselected**; coverage **92.35%** (80%
+  gate); ruff + mypy(strict) clean. **VERDICT: PASS.**
+- Not covered (by design): the SSE stream loop + socket bind in server.py (transport glue) —
+  validated by a manual live smoke (routes + gzip + 404 on an ephemeral port), not the gate.
+- Completed: 2026-08-04 | Tag: `s12b-complete`

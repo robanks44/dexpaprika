@@ -751,6 +751,64 @@ def _cmd_recorder(args: argparse.Namespace, *, as_json: bool) -> int:
     return EXIT_OK
 
 
+def _cmd_dashboard(args: argparse.Namespace, *, as_json: bool) -> int:
+    settings = Settings.load()
+    path = db_path(settings)
+    if not path.exists():
+        _emit(
+            {"error": "database missing — run `dexpaprika db migrate` first"},
+            as_json=as_json,
+        )
+        return EXIT_FAILURE
+
+    if args.dashboard_command == "export":
+        from dexpaprika.dashboard.export import render_export
+
+        conn = connect(path)
+        try:
+            content = render_export(conn, settings)
+        finally:
+            conn.close()
+        out = Path(args.out) if args.out else Path(settings.data_dir) / "dashboard.html"
+        out.write_text(content, encoding="utf-8")
+        _emit({"written": str(out), "bytes": len(content)}, as_json=as_json)
+        return EXIT_OK
+
+    # dashboard serve — read-only server + local DB-watch SSE (blocks).
+    import threading
+
+    from dexpaprika.dashboard.server import Broadcaster, DbWatcher, serve
+
+    broadcaster = Broadcaster()
+
+    def _conn_factory() -> Any:
+        return connect(path)
+
+    stop_flag = threading.Event()
+    watcher = DbWatcher(
+        _conn_factory,
+        broadcaster,
+        sleep=__import__("time").sleep,
+        stop=stop_flag.is_set,
+        interval=1.0,
+    )
+    httpd = serve(_conn_factory, settings, host=args.host, port=args.port, broadcaster=broadcaster)
+    watch_thread = threading.Thread(target=watcher.run, daemon=True)
+    watch_thread.start()
+    _emit(
+        {"serving": f"http://{args.host}:{args.port}", "note": "read-only; Ctrl-C to stop"},
+        as_json=as_json,
+    )
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_flag.set()
+        httpd.shutdown()
+    return EXIT_OK
+
+
 def _cmd_report(*, as_json: bool) -> int:
     from decimal import Decimal
 
@@ -1574,6 +1632,20 @@ def build_parser() -> argparse.ArgumentParser:
     r_status = recorder_sub.add_parser("status", help="Last cycle per source + staleness.")
     _add_json_flag(r_status)
 
+    dashboard = subparsers.add_parser(
+        "dashboard", help="Live read-only dashboard (SSE) or a static HTML export."
+    )
+    dashboard_sub = dashboard.add_subparsers(dest="dashboard_command", required=True)
+    d_serve = dashboard_sub.add_parser("serve", help="Run the read-only dashboard server (blocks).")
+    d_serve.add_argument("--host", default="127.0.0.1")
+    d_serve.add_argument("--port", type=int, default=8787)
+    _add_json_flag(d_serve)
+    d_export = dashboard_sub.add_parser(
+        "export", help="Write a self-contained static HTML snapshot."
+    )
+    d_export.add_argument("--out", default=None, help="Default: <data_dir>/dashboard.html")
+    _add_json_flag(d_export)
+
     report = subparsers.add_parser("report", help="Latest portfolio grouped with as_of/source.")
     _add_json_flag(report)
 
@@ -1664,6 +1736,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_snapshot(args, as_json=args.as_json)
     if args.command == "recorder":
         return _cmd_recorder(args, as_json=args.as_json)
+    if args.command == "dashboard":
+        return _cmd_dashboard(args, as_json=args.as_json)
     if args.command == "report":
         return _cmd_report(as_json=args.as_json)
     if args.command == "hedge":
