@@ -1,0 +1,35 @@
+{
+  "_note": "S12a probe gate — hedge side. Live GMX REST peers (arbitrum.gmxapi.io/.ai /v1) returned HTTP 400 on /positions during the 2026-08-04 probe session (endpoint-side; not fabricated around). This file is the SCHEMA-DERIVED field set for the recorded hedge state_json, taken verbatim from src/dexpaprika/clients/gmx.py GmxPosition + record_observation. Values below are ILLUSTRATIVE placeholders only — the S12a full-variable test asserts FIELD PRESENCE against a mocked GmxClient, never these numbers.",
+  "source": "src/dexpaprika/clients/gmx.py::GmxPosition.model_dump(exclude={raw,related_orders}) + injected stop_loss_* fields in record_observation",
+  "recorded_state_json_fields": {
+    "key": "<order/position key>",
+    "account": "0x...",
+    "market_address": "0x...",
+    "index_name": "ETH/USD",
+    "pool_name": "ETH/USD [WETH-USDC]",
+    "is_long": false,
+    "size_usd": "illustrative",
+    "size_tokens": "illustrative (size in ETH)",
+    "entry_price": "illustrative",
+    "mark_price": "illustrative",
+    "liquidation_price": "illustrative",
+    "collateral_usd": "illustrative",
+    "collateral_amount": "illustrative",
+    "leverage": "illustrative",
+    "pnl": "illustrative (uPnL)",
+    "pending_borrowing_fees_usd": "illustrative",
+    "pending_funding_fees_usd": "illustrative",
+    "stop_loss_triggers": ["<existing field: list of SL trigger prices>"],
+    "stop_loss_orders": ["<S12a ADDITION: list of {trigger, size_usd, is_full_close} so SL SIZE lives in state_json, not only orders table>"]
+  },
+  "acceptance_field_coverage": {
+    "mark/entry/liq price": "mark_price, entry_price, liquidation_price — PRESENT",
+    "size USD + ETH": "size_usd, size_tokens — PRESENT",
+    "collateral/margin": "collateral_usd, collateral_amount — PRESENT",
+    "leverage": "leverage — PRESENT",
+    "uPnL": "pnl — PRESENT",
+    "funding + borrowing fees": "pending_funding_fees_usd, pending_borrowing_fees_usd — PRESENT",
+    "SL trigger": "stop_loss_triggers — PRESENT (existing)",
+    "SL size": "stop_loss_orders — ADDED in S12a (gap closed)"
+  }
+}
