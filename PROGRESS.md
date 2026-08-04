@@ -7,10 +7,11 @@
 ## Status
 
 - Phase: `building`  <!-- not-started | setup | building | complete | blocked -->
-- Current section: core build S0–S11 complete; S9 hedge execution PIVOTED to on-chain
-  GmxSdk + LIVE-EXERCISED (2026-08-04); S9.6 on-chain executor verified (fresh-agent PASS).
-  Next planned: S12 recorder + live dashboard, S13 external watchdog + digest, S14
-  delta-band rebalance. **S5 range-bounds custody blocker RESOLVED (probe-verified live
+- Current section: **S12a in_progress** (branch `section/s12a-recorder`) — recorder service
+  + full-variable recording; spec at `docs/specs/S12a-recorder.md`. Core build S0–S11
+  complete; S9 hedge execution PIVOTED to on-chain GmxSdk + LIVE-EXERCISED (2026-08-04);
+  S9.6 on-chain executor verified (fresh-agent PASS). Next: S12b dashboard, S13 watchdog,
+  S14 delta-band. **S5 range-bounds custody blocker RESOLVED (probe-verified live
   2026-08-04)** — S12 metrics + S14 now unblocked. See SECTION_PLAN.
 - Last updated: 2026-08-04
 - Blockers: none. (ENGINEERING_STANDARDS §6 daemon-vs-correctness amendment done 2026-08-04.)
