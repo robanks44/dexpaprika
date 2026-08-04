@@ -344,9 +344,13 @@ def _drive(path: str, headers: dict[str, str], db: Path) -> tuple[int, dict[str,
     server_obj = SimpleNamespace(
         conn_factory=lambda: connect(db), settings=_settings(), broadcaster=Broadcaster()
     )
+    import io
+
+    buf = io.BytesIO()  # typed BytesIO so .getvalue() is visible to mypy
     h = _FakeHandler(path, headers, server_obj)
+    h.wfile = buf
     h.do_GET()
-    raw = h.wfile.getvalue()
+    raw = buf.getvalue()
     head, _, body = raw.partition(b"\r\n\r\n")
     lines = head.decode("latin-1").split("\r\n")
     status = int(lines[0].split()[1])

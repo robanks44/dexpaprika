@@ -79,7 +79,11 @@ class DbWatcher:
         self._sleep = sleep
         self._stop = stop
         self._interval = interval
-        self._last = self._max_id(conn_factory())
+        probe = conn_factory()
+        try:
+            self._last = self._max_id(probe)
+        finally:
+            probe.close()
 
     @staticmethod
     def _max_id(conn: sqlite3.Connection) -> int:
@@ -94,15 +98,18 @@ class DbWatcher:
         conn = self._conn_factory()
         published = 0
         ticks = 0
-        while not self._stop() and (max_ticks is None or ticks < max_ticks):
-            current = self._max_id(conn)
-            if current > self._last:
-                self._broadcaster.publish("update")
-                self._last = current
-                published += 1
-            ticks += 1
-            if not self._stop() and (max_ticks is None or ticks < max_ticks):
-                self._sleep(self._interval)
+        try:
+            while not self._stop() and (max_ticks is None or ticks < max_ticks):
+                current = self._max_id(conn)
+                if current > self._last:
+                    self._broadcaster.publish("update")
+                    self._last = current
+                    published += 1
+                ticks += 1
+                if not self._stop() and (max_ticks is None or ticks < max_ticks):
+                    self._sleep(self._interval)
+        finally:
+            conn.close()
         return published
 
 
